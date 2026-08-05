@@ -348,6 +348,106 @@ def build_array_program_and_read_netlist(osdi_path, W, activations, r_sense=20.0
     return "\n".join(lines)
 
 
+def build_array_program_and_read_netlist_1t1r(osdi_path, W, activations, r_sense=20.0,
+                                               vread_base=0.1, slot_duration=240.0,
+                                               switch_settle_ns=0.04,
+                                               results_file="array_1t1r_dynamic_results.txt"):
+    """1T1R (single-ended) counterpart to build_array_program_and_read_netlist:
+    M*K sequential program slots instead of 2*M*K (no polarity dimension,
+    no differential pair), one bitline per column instead of two. Same
+    fixes baked in (switch closed at t=0, DRIVER_IDLE_V epsilon holds,
+    switch-in-loop calibration). Negative weights are clipped to 0 by
+    decompose_single_ended -- this netlist will faithfully reproduce that
+    real limitation, not paper over it."""
+    M = len(activations)
+    K = len(W[0])
+    PROGRAM_VOLTAGE = col.PROGRAM_VOLTAGE
+    DRIVER_IDLE_V = col.DRIVER_IDLE_V
+
+    cell_order = []
+    for i in range(M):
+        for k in range(K):
+            width, _ = decompose_single_ended(W[i][k])
+            cell_order.append((i, k, width))
+
+    total_cells = len(cell_order)
+    total_program_time = total_cells * slot_duration
+    read_start = total_program_time + 0.05
+    total_end = total_program_time + 2.0
+
+    slots_by_row = {i: [] for i in range(M)}
+    for idx, (i, k, width) in enumerate(cell_order):
+        slots_by_row[i].append((idx * slot_duration, k, width))
+
+    lines = [
+        "* M x K 1T1R (single-ended, unsigned) crossbar -- full dynamic program-then-read",
+        f"* {M} rows x {K} columns = {total_cells} physical cells (half of the 2T2R equivalent)",
+        ".control",
+        f"pre_osdi {osdi_path}",
+        ".endc",
+        "",
+        ".model selmod SW(Ron=1 Roff=1e12 Vt=0.5 Vh=0.1)",
+        ".model rram_model rram_v_1_0_0",
+        "",
+    ]
+
+    for i in range(M):
+        pts = [(0, DRIVER_IDLE_V)]
+        for slot_start, k, width in slots_by_row[i]:
+            if width > 0.001:
+                pulse_start = slot_start + 0.01 + switch_settle_ns
+                if slot_start > 0:
+                    pts.append((slot_start, DRIVER_IDLE_V))
+                pts.append((pulse_start, PROGRAM_VOLTAGE))
+                pts.append((pulse_start + width - 0.05, PROGRAM_VOLTAGE))
+                pts.append((pulse_start + width, DRIVER_IDLE_V))
+        pts.append((total_program_time, DRIVER_IDLE_V))
+        v = vread_base * activations[i]
+        pts.append((read_start, v))
+        pts.append((total_end, v))
+        pwl = " ".join(f"{t}n {vv}" for t, vv in pts)
+        lines.append(f"Vrow{i} wl{i} 0 PWL({pwl})")
+    lines.append("")
+
+    for idx, (i, k, width) in enumerate(cell_order):
+        slot_start = idx * slot_duration
+        slot_end = slot_start + slot_duration
+        cid = f"{i}_{k}"
+
+        sel_pts = [(0, 1.0)]
+        if slot_start > 0:
+            sel_pts.append((0.02, 0.0))
+            sel_pts.append((slot_start, 0.0))
+        sel_pts.append((slot_start + 0.01, 1.0))
+        if slot_end < total_program_time - 0.001:
+            sel_pts.append((slot_end - 0.01, 1.0))
+            sel_pts.append((slot_end, 0.0))
+            sel_pts.append((total_program_time, 0.0))
+            sel_pts.append((total_program_time + 0.01, 1.0))
+        else:
+            sel_pts.append((total_program_time, 1.0))
+        sel_pts.append((total_end, 1.0))
+        sel_pwl = " ".join(f"{t}n {v}" for t, v in sel_pts)
+
+        lines.append(f"N{cid} wl{i} celltop{cid} rram_model")
+        lines.append(f"S{cid} celltop{cid} bl{k} sel{cid} 0 selmod")
+        lines.append(f"Vsel{cid} sel{cid} 0 PWL({sel_pwl})")
+        lines.append("")
+
+    for k in range(K):
+        lines.append(f"Rsense{k} bl{k} 0 {r_sense}")
+    lines.append("")
+    lines.append(f".tran 50p {total_end}n")
+    lines.append(".control")
+    lines.append("run")
+    wrdata_vecs = " ".join(f"v(bl{k})" for k in range(K))
+    lines.append(f"wrdata {results_file} {wrdata_vecs}")
+    lines.append(".endc")
+    lines.append(".end")
+    return "\n".join(lines)
+
+
+
 def build_conv_dynamic_netlist(osdi_path, kernels, input_fmap, stride=1, r_sense=20.0,
                                 vread_base=0.1, slot_duration=240.0, switch_settle_ns=0.04,
                                 read_window_ns=2.0, results_file="conv_dynamic_results.txt"):
@@ -478,19 +578,125 @@ def build_conv_dynamic_netlist(osdi_path, kernels, input_fmap, stride=1, r_sense
     return "\n".join(lines), read_window_times, out_h, out_w, K
 
 
-def parse_conv_dynamic_results(results_path, read_window_times, K, r_sense=20.0):
-    """Extract one settled differential-current vector (length K) per
-    patch from a conv_dynamic_results.txt wrdata dump, by keeping the
-    LAST sample seen inside each patch's read window (the file is
-    sequential in time, so 'last seen while t is in-window' == settled
-    value at the end of that window). wrdata's column layout for K
-    requested vectors is (t, val, t, val, ...) -- one time column per
-    vector even though they share the same simulation timepoint."""
+def build_conv_dynamic_netlist_1t1r(osdi_path, kernels, input_fmap, stride=1, r_sense=20.0,
+                                     vread_base=0.1, slot_duration=240.0, switch_settle_ns=0.04,
+                                     read_window_ns=2.0, results_file="conv_1t1r_dynamic_results.txt"):
+    """1T1R (single-ended) counterpart to build_conv_dynamic_netlist: M*K
+    program slots instead of 2*M*K, one bitline per column. Same
+    weight-stationary multi-read-window structure. Negative kernel
+    weights are clipped to 0 (decompose_single_ended), reproducing the
+    real 1T1R sign limitation in the actual simulated netlist."""
+    kh = len(kernels[0][0])
+    kw = len(kernels[0][0][0])
+    W = kernels_to_weight_matrix(kernels)
+    patches, out_h, out_w = im2col_patches(input_fmap, kh, kw, stride)
+    M = len(patches[0])
+    K = len(kernels)
+    n_patches = len(patches)
+
+    PROGRAM_VOLTAGE = col.PROGRAM_VOLTAGE
+    DRIVER_IDLE_V = col.DRIVER_IDLE_V
+
+    cell_order = []
+    for i in range(M):
+        for k in range(K):
+            width, _ = decompose_single_ended(W[i][k])
+            cell_order.append((i, k, width))
+    total_cells = len(cell_order)
+    total_program_time = total_cells * slot_duration
+
+    slots_by_row = {i: [] for i in range(M)}
+    for idx, (i, k, width) in enumerate(cell_order):
+        slots_by_row[i].append((idx * slot_duration, k, width))
+
+    read_window_times = []
+    t = total_program_time + 0.05
+    for p in range(n_patches):
+        w_start = t
+        w_end = t + read_window_ns
+        read_window_times.append((p, w_start, w_end))
+        t = w_end + 0.01
+    total_end = t + 1.0
+
+    lines = [
+        f"* Conv2d via crossbar (1T1R): {M} rows x {K} cols = {total_cells} cells,"
+        f" {n_patches} patches ({out_h}x{out_w} output), weight-stationary",
+        ".control",
+        f"pre_osdi {osdi_path}",
+        ".endc",
+        "",
+        ".model selmod SW(Ron=1 Roff=1e12 Vt=0.5 Vh=0.1)",
+        ".model rram_model rram_v_1_0_0",
+        "",
+    ]
+
+    for i in range(M):
+        pts = [(0, DRIVER_IDLE_V)]
+        for slot_start, k, width in slots_by_row[i]:
+            if width > 0.001:
+                pulse_start = slot_start + 0.01 + switch_settle_ns
+                if slot_start > 0:
+                    pts.append((slot_start, DRIVER_IDLE_V))
+                pts.append((pulse_start, PROGRAM_VOLTAGE))
+                pts.append((pulse_start + width - 0.05, PROGRAM_VOLTAGE))
+                pts.append((pulse_start + width, DRIVER_IDLE_V))
+        pts.append((total_program_time, DRIVER_IDLE_V))
+        for p, w_start, w_end in read_window_times:
+            v = vread_base * patches[p][i]
+            pts.append((w_start, v))
+            pts.append((w_end, v))
+        pwl = " ".join(f"{t_}n {vv}" for t_, vv in pts)
+        lines.append(f"Vrow{i} wl{i} 0 PWL({pwl})")
+    lines.append("")
+
+    for idx, (i, k, width) in enumerate(cell_order):
+        slot_start = idx * slot_duration
+        slot_end = slot_start + slot_duration
+        cid = f"{i}_{k}"
+
+        sel_pts = [(0, 1.0)]
+        if slot_start > 0:
+            sel_pts.append((0.02, 0.0))
+            sel_pts.append((slot_start, 0.0))
+        sel_pts.append((slot_start + 0.01, 1.0))
+        if slot_end < total_program_time - 0.001:
+            sel_pts.append((slot_end - 0.01, 1.0))
+            sel_pts.append((slot_end, 0.0))
+            sel_pts.append((total_program_time, 0.0))
+            sel_pts.append((total_program_time + 0.01, 1.0))
+        else:
+            sel_pts.append((total_program_time, 1.0))
+        sel_pts.append((total_end, 1.0))
+        sel_pwl = " ".join(f"{t}n {v}" for t, v in sel_pts)
+
+        lines.append(f"N{cid} wl{i} celltop{cid} rram_model")
+        lines.append(f"S{cid} celltop{cid} bl{k} sel{cid} 0 selmod")
+        lines.append(f"Vsel{cid} sel{cid} 0 PWL({sel_pwl})")
+        lines.append("")
+
+    for k in range(K):
+        lines.append(f"Rsense{k} bl{k} 0 {r_sense}")
+    lines.append("")
+    lines.append(f".tran 50p {total_end}n")
+    lines.append(".control")
+    lines.append("run")
+    wrdata_vecs = " ".join(f"v(bl{k})" for k in range(K))
+    lines.append(f"wrdata {results_file} {wrdata_vecs}")
+    lines.append(".endc")
+    lines.append(".end")
+    return "\n".join(lines), read_window_times, out_h, out_w, K
+
+
+def parse_conv_dynamic_results_generic(results_path, read_window_times, K, r_sense=20.0, differential=True):
+    """Generalized version of parse_conv_dynamic_results: works for both
+    2T2R (differential=True, 2 vectors/col: blp,bln) and 1T1R
+    (differential=False, 1 vector/col: bl)."""
+    vecs_per_col = 2 if differential else 1
     last_in_window = {p: None for p, _, _ in read_window_times}
     with open(results_path) as f:
         for line in f:
             parts = line.split()
-            if len(parts) < 2 * (2 * K):
+            if len(parts) < 2 * (vecs_per_col * K):
                 continue
             try:
                 t_ns = float(parts[0]) * 1e9
@@ -506,9 +712,18 @@ def parse_conv_dynamic_results(results_path, read_window_times, K, r_sense=20.0)
         if vals is None:
             outputs.append(None)
             continue
-        diffs = [(vals[2 * k] - vals[2 * k + 1]) / r_sense for k in range(K)]
+        if differential:
+            diffs = [(vals[2 * k] - vals[2 * k + 1]) / r_sense for k in range(K)]
+        else:
+            diffs = [vals[k] / r_sense for k in range(K)]
         outputs.append(diffs)
     return outputs
+
+
+def parse_conv_dynamic_results(results_path, read_window_times, K, r_sense=20.0):
+    """Backward-compatible name for the 2T2R (differential) case --
+    thin wrapper around parse_conv_dynamic_results_generic."""
+    return parse_conv_dynamic_results_generic(results_path, read_window_times, K, r_sense, differential=True)
 
 
 def decompose_single_ended(w):
