@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\caption{Memory metrics, ResNet-18 on CIFAR-10, \SI{65}{\nano\meter}. These are where the ReRAM implementation wins; it does not win on compute efficiency at any tile size we measured.}
+\label{tab:memory}
+\begin{tabular}{lrrr}
+\toprule
+Metric & A (ReRAM) & B (SRAM) & Gain \\
+\midrule
+Weight array area (mm$^2$) & 3.77 & 13.20 & 3.5$\times$ \\
+vs FP32 weights (mm$^2$) & 3.77 & 211.2 & 56$\times$ \\
+Standby power (mW) & 0.0 & 2.68 & $\infty$ \\
+Weight-fetch energy (pJ/MAC) & 0 & 0.100 & $\infty$ \\
+\bottomrule
+\end{tabular}
+\end{table}

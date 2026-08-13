@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>ReRAM Crossbar Visualizer (local)</title>
+<!--
+  Loaded via the local server's /vendor/ route, which caches these on first
+  run and falls back to redirecting to the CDN. Pointing straight at unpkg
+  means a blank page whenever the CDN is blocked, slow, or offline -- and a
+  blank page with no error is exactly what you get, because a failed <script
+  src> is silent. The bootstrap block further down turns that silence into a
+  readable message.
+  If you open this file directly via file:// instead of through server.py,
+  /vendor/ cannot resolve; the bootstrap will tell you so and how to fix it.
+-->
+<script src="/vendor/react.js" onerror="window.__cdnFail=(window.__cdnFail||[]).concat('react')"></script>
+<script src="/vendor/react-dom.js" onerror="window.__cdnFail=(window.__cdnFail||[]).concat('react-dom')"></script>
+<script src="/vendor/babel.js" onerror="window.__cdnFail=(window.__cdnFail||[]).concat('babel')"></script>
+<script src="/vendor/tailwind.js" onerror="window.__cdnFail=(window.__cdnFail||[]).concat('tailwind')"></script>
+<style>
+  body { margin: 0; }
+  input[type="range"] { accent-color: #ffb454; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* ---------------------------------------------------------------------
+   BOOTSTRAP DIAGNOSTIC
+   A React page whose dependencies failed to load renders as a completely
+   blank white document with nothing in the console except a network error
+   you have to go looking for. This turns every failure mode -- missing
+   dependency, JSX compile error, runtime exception -- into a visible panel
+   that says which one happened and what to do about it.
+--------------------------------------------------------------------- */
+(function () {
+  var CSS = "background:#0a0e14;color:#e6edf3;font:13px/1.6 ui-sans-serif,system-ui,sans-serif;padding:28px;min-height:100vh;box-sizing:border-box";
+  function panel(title, body, hint) {
+    document.getElementById("root").setAttribute("style", CSS);
+    document.getElementById("root").innerHTML =
+      '<div style="max-width:760px">' +
+      '<div style="color:#ff6b6b;font-size:15px;font-weight:600;margin-bottom:10px">' + title + "</div>" +
+      '<pre style="background:#121821;border:1px solid #232b36;border-radius:8px;padding:14px;overflow:auto;white-space:pre-wrap;font:12px ui-monospace,Menlo,monospace;color:#e6edf3">' +
+      body + "</pre>" +
+      (hint ? '<div style="color:#7d8590;margin-top:12px">' + hint + "</div>" : "") +
+      "</div>";
+  }
+  window.__panel = panel;
+
+  window.addEventListener("error", function (e) {
+    var root = document.getElementById("root");
+    if (root && root.children.length && !root.__diag) return;   // app already rendered
+    panel("JavaScript error — the dashboard could not start",
+      (e.message || "unknown error") + "\n\n" + (e.filename || "") + ":" + (e.lineno || "?"),
+      "If this mentions a component name, it is a bug in the dashboard code. Copy the message.");
+  });
+
+  window.addEventListener("DOMContentLoaded", function () {
+    var missing = [];
+    if (typeof React === "undefined") missing.push("React");
+    if (typeof ReactDOM === "undefined") missing.push("ReactDOM");
+    if (typeof Babel === "undefined") missing.push("Babel");
+    if (!missing.length) return;
+    var viaFile = location.protocol === "file:";
+    document.getElementById("root").__diag = 1;
+    panel("Dependencies did not load: " + missing.join(", "),
+      "failed: " + ((window.__cdnFail || []).join(", ") || "(no onerror fired — likely blocked before the request)") +
+      "\nprotocol: " + location.protocol + "\norigin: " + location.origin,
+      viaFile
+        ? "You opened this file directly. The <code>/vendor/</code> paths only resolve through the server — run <code>python3 server.py --port 5057</code> and open <code>http://localhost:5057</code>."
+        : "The server's /vendor/ route could not supply these. It caches them into ./vendor/ on first request and otherwise redirects to unpkg.com, so this usually means the machine running server.py has no internet. Fix: <code>python3 server.py --fetch-vendor</code> once while online, or download react.production.min.js, react-dom.production.min.js and babel.min.js into a <code>vendor/</code> directory next to server.py.");
+  });
+})();
+</script>
+<script type="text/babel" data-presets="react">
+const { useState, useCallback, useRef, useEffect } = React;
+
+/* ---------------------------------------------------------------------
+   TINY INLINE ICONS (avoids an extra CDN dependency for a handful of glyphs)
+--------------------------------------------------------------------- */
+const Icon = ({ path, size = 14, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d={path} />
+  </svg>
+);
+const PlayIcon = (p) => <Icon {...p} path="M5 3l14 9-14 9V3z" />;
+const ResetIcon = (p) => <Icon {...p} path="M3 12a9 9 0 1 0 3-6.7M3 4v6h6" />;
+const ShuffleIcon = (p) => <Icon {...p} path="M17 3l4 4-4 4M3 7h6l3 4M21 21l-4-4-4 4M3 17h6l3-4M14 7h7" />;
+const ZapIcon = (p) => <Icon {...p} path="M13 2L4 14h6l-1 8 9-12h-6l1-8z" />;
+const ChevronIcon = (p) => <Icon {...p} path="M9 18l6-6-6-6" />;
+
+/* ---------------------------------------------------------------------
+   DEVICE PHYSICS -- used for instant local preview / animation coloring.
+   The AUTHORITATIVE results shown after "Program & read" come from the
+   Flask backend (server.py), which calls your real column_mac_test.py /
+   crossbar_array_test.py directly (and real ngspice, if selected).
+--------------------------------------------------------------------- */
+const FP2_LEVELS = [-1, -0.5, 0, 0.5, 1];
+const R_LRS = 542.8;
+const R_MID = 1099.8;
+const R_HRS = 218587;
+const R_FOR_MAG = { 0: R_HRS, 0.5: R_MID, 1: R_LRS };
+const V_READ = 0.1;
+const R_SENSE = 20.0;
+const G_LRS = 1 / R_LRS;
+
+const quantize = (w) =>
+  FP2_LEVELS.reduce((best, l) => (Math.abs(l - w) < Math.abs(best - w) ? l : best), FP2_LEVELS[0]);
+
+function fp2Encode(w) {
+  const wq = quantize(w);
+  const mag = Math.abs(wq);
+  const dir = wq < 0 ? 1 : 0;
+  const mag1 = mag === 1 ? 1 : 0;
+  const mag0 = mag === 0.5 ? 1 : 0;
+  return { dir, mag1, mag0, bits: `${dir}${mag1}${mag0}` };
+}
+function decomposeDiff(w) {
+  const wq = quantize(w);
+  const mag = Math.abs(wq);
+  const r = R_FOR_MAG[mag];
+  const rOff = R_FOR_MAG[0];
+  return wq >= 0 ? { rp: r, rn: rOff } : { rp: rOff, rn: r };
+}
+function decomposeSingle(w) {
+  const wq = Math.max(quantize(w), 0);
+  return R_FOR_MAG[wq];
+}
+function solveColumn(weightsCol, activations, topology) {
+  if (topology === "2t2r") {
+    let sumGp = 1 / R_SENSE, sumVRp = 0, sumGn = 1 / R_SENSE, sumVRn = 0;
+    weightsCol.forEach((w, i) => {
+      const { rp, rn } = decomposeDiff(w);
+      const v = V_READ * activations[i];
+      sumGp += 1 / rp; sumVRp += v / rp;
+      sumGn += 1 / rn; sumVRn += v / rn;
+    });
+    return (sumVRp / sumGp - sumVRn / sumGn) / R_SENSE;
+  } else {
+    let sumG = 1 / R_SENSE, sumVR = 0;
+    weightsCol.forEach((w, i) => {
+      const r = decomposeSingle(w);
+      const v = V_READ * activations[i];
+      sumG += 1 / r; sumVR += v / r;
+    });
+    return (sumVR / sumG) / R_SENSE;
+  }
+}
+function digitalExact(weightsCol, activations) {
+  return weightsCol.reduce((s, w, i) => s + activations[i] * quantize(w), 0);
+}
+function analogRecovered(current) { return current / (V_READ * G_LRS); }
+
+/* ---------------------------------------------------------------------
+   DESIGN TOKENS
+--------------------------------------------------------------------- */
+const COL = {
+  bg: "#0a0e14", panel: "#121821", panel2: "#182029", border: "#232b36",
+  text: "#e6edf3", dim: "#7d8590", amber: "#ffb454", cyan: "#56d4dd",
+  red: "#ff6b6b", green: "#7ee787", off: "#2a3341",
+};
+const MONO = "ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace";
+const SANS = "ui-sans-serif, system-ui, -apple-system, sans-serif";
+
+function resistanceColor(r) {
+  const t = Math.min(1, Math.max(0, (Math.log10(r) - Math.log10(R_LRS)) / (Math.log10(R_HRS) - Math.log10(R_LRS))));
+  const c0 = [255, 180, 84], c1 = [42, 51, 65];
+  const c = c0.map((v, i) => Math.round(v + (c1[i] - v) * t));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+/* ---------------------------------------------------------------------
+   BACKEND CLIENT
+--------------------------------------------------------------------- */
+async function apiCall(base, path, body) {
+  const res = await fetch(base + path, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+async function apiStatus(base) {
+  const res = await fetch(base + "/api/status");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+/* ---------------------------------------------------------------------
+   SMALL UI PRIMITIVES
+--------------------------------------------------------------------- */
+function SegButton({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} className="px-3 py-1.5 text-sm rounded-md transition-colors"
+      style={{ fontFamily: SANS, background: active ? COL.amber : "transparent", color: active ? "#12100a" : COL.dim, fontWeight: active ? 600 : 500 }}>
+      {children}
+    </button>
+  );
+}
+function Panel({ title, children, className = "" }) {
+  return (
+    <div className={`rounded-lg p-4 ${className}`} style={{ background: COL.panel, border: `1px solid ${COL.border}` }}>
+      {title && <div className="text-xs uppercase tracking-wider mb-3" style={{ color: COL.dim, fontFamily: SANS, letterSpacing: "0.08em" }}>{title}</div>}
+      {children}
+    </div>
+  );
+}
+function Stepper({ value, onChange, min, max, label }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span style={{ color: COL.dim, fontFamily: SANS, fontSize: 13 }}>{label}</span>
+      <div className="flex items-center gap-2">
+        <button onClick={() => onChange(Math.max(min, value - 1))} className="w-6 h-6 rounded flex items-center justify-center text-sm" style={{ background: COL.panel2, color: COL.text, border: `1px solid ${COL.border}` }}>−</button>
+        <span style={{ fontFamily: MONO, color: COL.text, width: 20, textAlign: "center" }}>{value}</span>
+        <button onClick={() => onChange(Math.min(max, value + 1))} className="w-6 h-6 rounded flex items-center justify-center text-sm" style={{ background: COL.panel2, color: COL.text, border: `1px solid ${COL.border}` }}>+</button>
+      </div>
+    </div>
+  );
+}
+function WeightChip({ value, onClick, size = 34, dimmed = false, flag = false }) {
+  const q = quantize(value);
+  const bg = q === 0 ? COL.off : q > 0 ? "rgba(255,180,84,0.18)" : "rgba(86,212,221,0.18)";
+  const border = q === 0 ? COL.border : q > 0 ? COL.amber : COL.cyan;
+  return (
+    <button onClick={onClick} className="rounded-md flex items-center justify-center relative transition-transform active:scale-95"
+      style={{ width: size, height: size, background: bg, border: `1px solid ${border}`, color: COL.text, fontFamily: MONO, fontSize: 12, opacity: dimmed ? 0.4 : 1 }}
+      title="Click to cycle: -1, -0.5, 0, 0.5, 1">
+      {q > 0 ? `+${q}` : q}
+      {flag && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full" style={{ background: COL.red, boxShadow: `0 0 4px ${COL.red}` }} title="Negative weight lost in 1T1R" />}
+    </button>
+  );
+}
+
+/* ---------------------------------------------------------------------
+   CROSSBAR SVG VISUALIZATION
+--------------------------------------------------------------------- */
+function CrossbarView({ M, K, topology, W, activations, phase, programIdx, programOrder, readActive, colResults, selectedCell, onSelectCell }) {
+  const cellW = 46, cellH = 30, rowLabelW = 46, topPad = 34, botPad = topology === "2t2r" ? 78 : 60;
+  const colGroupW = topology === "2t2r" ? cellW * 2 + 10 : cellW;
+  const width = rowLabelW + K * colGroupW + 20;
+  const height = topPad + M * cellH + botPad;
+
+  const isProgramming = (idx) => phase === "programming" && programOrder && programIdx >= 0 && programOrder[programIdx] === idx;
+  const isProgrammed = (idx) => phase === "programming" ? programOrder.indexOf(idx) <= programIdx : true;
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ maxWidth: width, display: "block" }}>
+      {Array.from({ length: K }).map((_, k) => (
+        <text key={k} x={rowLabelW + k * colGroupW + colGroupW / 2} y={16} fill={COL.dim} fontSize={11} fontFamily={MONO} textAnchor="middle">out{k}</text>
+      ))}
+      {Array.from({ length: M }).map((_, i) => {
+        const y = topPad + i * cellH;
+        const a = activations[i];
+        const rowActive = readActive;
+        return (
+          <g key={i}>
+            <text x={rowLabelW - 8} y={y + cellH / 2 + 4} fill={COL.dim} fontSize={10} fontFamily={MONO} textAnchor="end">in{i}</text>
+            <line x1={rowLabelW} y1={y + cellH / 2} x2={width - 10} y2={y + cellH / 2}
+              stroke={rowActive ? (a >= 0 ? COL.amber : COL.cyan) : COL.border} strokeWidth={rowActive ? 2 : 1} opacity={rowActive ? 0.55 : 1} />
+            {rowActive && (
+              <circle r={3} fill={a >= 0 ? COL.amber : COL.cyan}>
+                <animateMotion dur="1.1s" repeatCount="indefinite" path={`M ${rowLabelW},${y + cellH / 2} L ${width - 10},${y + cellH / 2}`} />
+              </circle>
+            )}
+            {Array.from({ length: K }).map((_, k) => {
+              const xg = rowLabelW + k * colGroupW;
+              const w = W[i][k];
+              const isSel = selectedCell && selectedCell.i === i && selectedCell.k === k;
+              if (topology === "2t2r") {
+                const { rp, rn } = decomposeDiff(w);
+                const idxP = (i * K + k) * 2, idxN = idxP + 1;
+                return (
+                  <g key={k}>
+                    {[["p", rp, idxP, xg], ["n", rn, idxN, xg + cellW]].map(([pol, r, idx, x]) => (
+                      <rect key={pol} x={x + 4} y={y + 4} width={cellW - 8} height={cellH - 8} rx={4}
+                        fill={isProgrammed(idx) ? resistanceColor(r) : COL.off}
+                        stroke={isProgramming(idx) ? COL.green : isSel ? COL.cyan : COL.border}
+                        strokeWidth={isProgramming(idx) ? 2 : isSel ? 2 : 1}
+                        strokeDasharray={isSel && !isProgramming(idx) ? "3,2" : "none"}
+                        onClick={() => onSelectCell && onSelectCell(i, k)}
+                        style={{ filter: isProgramming(idx) ? `drop-shadow(0 0 6px ${COL.green})` : "none", transition: "fill 0.2s", cursor: "pointer" }} />
+                    ))}
+                  </g>
+                );
+              } else {
+                const r = decomposeSingle(w);
+                const idx = i * K + k;
+                const negLost = quantize(w) < 0;
+                return (
+                  <rect key={k} x={xg + 4} y={y + 4} width={cellW - 8} height={cellH - 8} rx={4}
+                    fill={isProgrammed(idx) ? resistanceColor(r) : COL.off}
+                    stroke={isProgramming(idx) ? COL.green : isSel ? COL.cyan : negLost ? COL.red : COL.border}
+                    strokeWidth={isProgramming(idx) ? 2 : isSel ? 2 : negLost ? 1.5 : 1}
+                    strokeDasharray={(negLost || isSel) && !isProgramming(idx) ? "3,2" : "none"}
+                    onClick={() => onSelectCell && onSelectCell(i, k)}
+                    style={{ filter: isProgramming(idx) ? `drop-shadow(0 0 6px ${COL.green})` : "none", transition: "fill 0.2s", cursor: "pointer" }} />
+                );
+              }
+            })}
+          </g>
+        );
+      })}
+      {Array.from({ length: K }).map((_, k) => {
+        const xg = rowLabelW + k * colGroupW;
+        const yBot = topPad + M * cellH;
+        const result = colResults ? colResults[k] : null;
+        if (topology === "2t2r") {
+          return (
+            <g key={k}>
+              <line x1={xg + cellW / 2} y1={topPad} x2={xg + cellW / 2} y2={yBot + 14} stroke={COL.amber} strokeWidth={1} opacity={0.35} />
+              <line x1={xg + cellW + cellW / 2} y1={topPad} x2={xg + cellW + cellW / 2} y2={yBot + 14} stroke={COL.cyan} strokeWidth={1} opacity={0.35} />
+              <rect x={xg + 2} y={yBot + 16} width={colGroupW - 12} height={22} rx={4} fill={COL.panel2} stroke={COL.border} />
+              <text x={xg + colGroupW / 2 - 6} y={yBot + 31} fontSize={10} fontFamily={MONO} textAnchor="middle" fill={phase === "done" ? COL.text : COL.dim}>Σ+ − Σ−</text>
+              <text x={xg + colGroupW / 2 - 6} y={yBot + 56} fontSize={11} fontFamily={MONO} textAnchor="middle" fontWeight="bold" fill={phase === "done" ? COL.green : COL.dim}>
+                {phase === "done" && result != null ? result.analog.toFixed(2) : "—"}
+              </text>
+            </g>
+          );
+        } else {
+          return (
+            <g key={k}>
+              <line x1={xg + cellW / 2} y1={topPad} x2={xg + cellW / 2} y2={yBot + 14} stroke={COL.amber} strokeWidth={1} opacity={0.35} />
+              <rect x={xg + 4} y={yBot + 16} width={cellW - 8} height={22} rx={4} fill={COL.panel2} stroke={COL.border} />
+              <text x={xg + cellW / 2} y={yBot + 31} fontSize={10} fontFamily={MONO} textAnchor="middle" fill={COL.dim}>TIA</text>
+              <text x={xg + cellW / 2} y={yBot + 52} fontSize={11} fontFamily={MONO} textAnchor="middle" fontWeight="bold" fill={phase === "done" ? COL.green : COL.dim}>
+                {phase === "done" && result != null ? result.analog.toFixed(2) : "—"}
+              </text>
+            </g>
+          );
+        }
+      })}
+    </svg>
+  );
+}
+
+function GridEditor({ grid, onCycle, cellSize = 32, highlight }) {
+  const Ncol = grid[0].length;
+  return (
+    <div style={{ display: "inline-grid", gridTemplateColumns: `repeat(${Ncol}, ${cellSize}px)`, gap: 3 }}>
+      {grid.map((row, i) => row.map((v, j) => {
+        const isHi = highlight && highlight(i, j);
+        return (
+          <div key={`${i}-${j}`} style={{ outline: isHi ? `2px solid ${COL.green}` : "none", borderRadius: 6 }}>
+            <WeightChip value={v} size={cellSize} onClick={() => onCycle(i, j)} />
+          </div>
+        );
+      }))}
+    </div>
+  );
+}
+
+function PipelineStep({ label, type, children }) {
+  return (
+    <div className="flex flex-col gap-1 py-2 px-3 rounded-md" style={{ background: COL.panel2, border: `1px solid ${COL.border}`, minWidth: 128 }}>
+      <span style={{ fontSize: 9, color: COL.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>
+      <span style={{ fontSize: 9, color: COL.cyan, fontFamily: MONO }}>{type}</span>
+      <div style={{ fontFamily: MONO, fontSize: 13, color: COL.text }}>{children}</div>
+    </div>
+  );
+}
+function PipelineArrow() { return <ChevronIcon size={16} color={COL.dim} />; }
+function DataPathPanel({ selCell, W, getActivation, topology, colResult, activePatchLabel }) {
+  const { i, k } = selCell;
+  const wRaw = W[i][k];
+  const wq = quantize(wRaw);
+  const enc = fp2Encode(wRaw);
+  const a = getActivation(i);
+  const vRead = V_READ * a;
+  const diff = topology === "2t2r" ? decomposeDiff(wRaw) : null;
+  const single = topology === "1t1r" ? decomposeSingle(wRaw) : null;
+  const fmtR = (r) => `${r.toLocaleString(undefined, { maximumFractionDigits: 1 })}Ω`;
+  const fmtI = (v) => `${v.toExponential(3)}A`;
+  return (
+    <Panel title={`Data path — cell (in${i}, out${k})${activePatchLabel ? ` · ${activePatchLabel}` : ""}`}>
+      <div className="flex flex-col gap-4">
+        <div>
+          <div style={{ fontSize: 11, color: COL.dim, marginBottom: 8 }}>Weight representation</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <PipelineStep label="Digital weight" type="float64">{wRaw.toFixed(4)}</PipelineStep>
+            <PipelineArrow />
+            <PipelineStep label="FP2 quantize" type="FP2-E1M0 level">{wq > 0 ? `+${wq}` : wq}<div style={{ fontSize: 9, color: COL.dim, marginTop: 2 }}>quant. err {(wq - wRaw).toFixed(3)}</div></PipelineStep>
+            <PipelineArrow />
+            <PipelineStep label="Bit encode" type="3b: dir,mag1,mag0">
+              <span style={{ color: COL.amber }}>{enc.dir}</span><span style={{ color: COL.cyan }}>{enc.mag1}</span><span style={{ color: COL.cyan }}>{enc.mag0}</span>
+              <div style={{ fontSize: 9, color: COL.dim, marginTop: 2 }}>dir={enc.dir} mag1={enc.mag1} mag0={enc.mag0}</div>
+            </PipelineStep>
+            <PipelineArrow />
+            {topology === "2t2r" ? (
+              <PipelineStep label="Differential decompose" type="2 cells (R+, R−)"><div>R+ = {fmtR(diff.rp)}</div><div>R− = {fmtR(diff.rn)}</div></PipelineStep>
+            ) : (
+              <PipelineStep label="Single-ended decompose" type="1 cell (R)"><div>R = {fmtR(single)}</div>{wq < 0 && <div style={{ color: COL.red, fontSize: 10, marginTop: 2 }}>sign lost — clipped to 0</div>}</PipelineStep>
+            )}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: COL.dim, marginBottom: 8 }}>Read signal chain — row in{i} feeding column out{k}</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <PipelineStep label="Digital activation" type="float64">{a.toFixed(3)}</PipelineStep>
+            <PipelineArrow />
+            <PipelineStep label="DAC" type="analog volts">{vRead.toFixed(4)}V<div style={{ fontSize: 9, color: COL.dim, marginTop: 2 }}>{V_READ} × {a.toFixed(2)}</div></PipelineStep>
+            <PipelineArrow />
+            {topology === "2t2r" ? (
+              <PipelineStep label="Ohm's law (this cell)" type="analog amps"><div>I+ = {fmtI(vRead / diff.rp)}</div><div>I− = {fmtI(vRead / diff.rn)}</div></PipelineStep>
+            ) : (
+              <PipelineStep label="Ohm's law (this cell)" type="analog amps">{fmtI(vRead / single)}</PipelineStep>
+            )}
+            <PipelineArrow />
+            <PipelineStep label="KCL sum" type={`all ${W.length} rows`}>{topology === "2t2r" ? "ΣI+, ΣI− on col" : "ΣI on col"}</PipelineStep>
+            <PipelineArrow />
+            <PipelineStep label={topology === "2t2r" ? "Differential subtract" : "Sense (TIA)"} type="analog A → V">
+              {colResult ? `${(colResult.analog * V_READ * G_LRS).toExponential(3)}A` : "—"}
+            </PipelineStep>
+            <PipelineArrow />
+            <PipelineStep label="Recovered digital" type="float64 (readout eq.)">
+              {colResult ? colResult.analog.toFixed(4) : "—"}
+              <div style={{ fontSize: 9, color: COL.dim, marginTop: 2 }}>digital exact: {colResult ? colResult.digital.toFixed(4) : "—"}</div>
+            </PipelineStep>
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+/* ---------------------------------------------------------------------
+   MAIN APP
+--------------------------------------------------------------------- */
+function App() {
+  const [apiBase, setApiBase] = useState(() => localStorage.getItem("crossbar_api_base") || "http://localhost:5057");
+  const [backendStatus, setBackendStatus] = useState(null);
+  const [engine, setEngine] = useState(() => localStorage.getItem("crossbar_engine") || "golden");
+
+  useEffect(() => { localStorage.setItem("crossbar_api_base", apiBase); }, [apiBase]);
+  useEffect(() => { localStorage.setItem("crossbar_engine", engine); }, [engine]);
+
+  const refreshStatus = useCallback(async () => {
+    try {
+      const s = await apiStatus(apiBase);
+      setBackendStatus({ online: true, ...s });
+    } catch (e) {
+      setBackendStatus({ online: false });
+    }
+  }, [apiBase]);
+  useEffect(() => { refreshStatus(); }, [refreshStatus]);
+
+  const [mode, setMode] = useState("matmul");
+  const [topology, setTopology] = useState("2t2r");
+
+  const [M, setM] = useState(4);
+  const [K, setK] = useState(3);
+  const [W, setW] = useState(() => Array.from({ length: 4 }, () => Array.from({ length: 3 }, () => 0)));
+  const [acts, setActs] = useState(() => Array.from({ length: 4 }, () => 1));
+
+  const [inSize, setInSize] = useState(4);
+  const [kSize, setKSize] = useState(2);
+  const [outCh, setOutCh] = useState(2);
+  const [inputGrid, setInputGrid] = useState(() => Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => 0)));
+  const [kernels, setKernels] = useState(() => Array.from({ length: 2 }, () => Array.from({ length: 2 }, () => Array.from({ length: 2 }, () => 0))));
+
+  const [phase, setPhase] = useState("idle");
+  const [programIdx, setProgramIdx] = useState(-1);
+  const [readActive, setReadActive] = useState(false);
+  const [colResults, setColResults] = useState(null);
+  const [patchIdx, setPatchIdx] = useState(-1);
+  const [outGrid, setOutGrid] = useState(null);
+  const [selectedCell, setSelectedCell] = useState({ i: 0, k: 0 });
+  const [backendError, setBackendError] = useState(null);
+  const [engineNote, setEngineNote] = useState(null);
+  const runningRef = useRef(false);
+
+  const resizeMatmul = (newM, newK) => {
+    setW((prev) => Array.from({ length: newM }, (_, i) => Array.from({ length: newK }, (_, k) => (prev[i] && prev[i][k] !== undefined ? prev[i][k] : 0))));
+    setActs((prev) => Array.from({ length: newM }, (_, i) => (prev[i] !== undefined ? prev[i] : 1)));
+  };
+  const resizeConv = (newIn, newK, newOut) => {
+    setInputGrid((prev) => Array.from({ length: newIn }, (_, i) => Array.from({ length: newIn }, (_, j) => (prev[i] && prev[i][j] !== undefined ? prev[i][j] : 0))));
+    setKernels((prev) => Array.from({ length: newOut }, (_, o) => Array.from({ length: newK }, (_, r) => Array.from({ length: newK }, (_, c) => (prev[o] && prev[o][r] && prev[o][r][c] !== undefined ? prev[o][r][c] : 0)))));
+  };
+  const cycleFP2 = (v) => FP2_LEVELS[(FP2_LEVELS.indexOf(quantize(v)) + 1) % FP2_LEVELS.length];
+
+  const outH = mode === "conv" ? inSize - kSize + 1 : 0;
+  const outW = outH;
+  function im2colPatches() {
+    const patches = [];
+    for (let oy = 0; oy < outH; oy++)
+      for (let ox = 0; ox < outW; ox++) {
+        const patch = [];
+        for (let ky = 0; ky < kSize; ky++) for (let kx = 0; kx < kSize; kx++) patch.push(inputGrid[oy + ky][ox + kx]);
+        patches.push({ oy, ox, patch });
+      }
+    return patches;
+  }
+  function kernelsToWeightMatrix() { return kernels.map((k) => k.flat()); }
+
+  const effM = mode === "matmul" ? M : kSize * kSize;
+  const effK = mode === "matmul" ? K : outCh;
+  const effW = mode === "matmul" ? W : (() => {
+    const flat = kernelsToWeightMatrix();
+    return Array.from({ length: effM }, (_, i) => flat.map((row) => row[i]));
+  })();
+
+  const programOrder = [];
+  if (topology === "2t2r") {
+    for (let i = 0; i < effM; i++) for (let k = 0; k < effK; k++) { programOrder.push((i * effK + k) * 2); programOrder.push((i * effK + k) * 2 + 1); }
+  } else {
+    for (let i = 0; i < effM; i++) for (let k = 0; k < effK; k++) programOrder.push(i * effK + k);
+  }
+
+  const activePatch = mode === "conv" && patchIdx >= 0 ? im2colPatches()[patchIdx] : null;
+
+  useEffect(() => { setSelectedCell((prev) => ({ i: Math.min(prev.i, effM - 1), k: Math.min(prev.k, effK - 1) })); }, [effM, effK]);
+  const getActivation = useCallback((row) => {
+    if (mode === "matmul") return acts[row] || 0;
+    if (activePatch) return activePatch.patch[row] || 0;
+    return 0;
+  }, [mode, acts, activePatch]);
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  const runAnimation = useCallback(async () => {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    setColResults(null); setOutGrid(null); setPatchIdx(-1); setBackendError(null); setEngineNote(null);
+    setPhase("programming"); setProgramIdx(-1);
+    const total = programOrder.length;
+    const stepDelay = Math.max(6, Math.min(60, Math.floor(900 / total)));
+    for (let s = 0; s < total; s++) { setProgramIdx(s); await sleep(stepDelay); }
+    setPhase("reading"); setReadActive(true);
+
+    const useBackend = backendStatus && backendStatus.online;
+
+    if (mode === "matmul") {
+      await sleep(400);
+      if (useBackend) {
+        setEngineNote(engine === "ngspice" ? "Running real ngspice simulation — this can take a while for larger arrays..." : "Querying Python golden model...");
+        try {
+          const data = await apiCall(apiBase, "/api/matmul", { weights: W, activations: acts, topology, engine });
+          const results = {};
+          for (let k = 0; k < effK; k++) results[k] = { analog: data.analog[k], digital: data.digital[k] };
+          setColResults(results);
+          setEngineNote(`${data.engine === "ngspice" ? "Real ngspice" : "Python golden model"} · ${data.cell_count} physical cells`);
+        } catch (e) {
+          setBackendError(e.message);
+          const results = {};
+          for (let k = 0; k < effK; k++) {
+            const col = effW.map((row) => row[k]);
+            results[k] = { analog: analogRecovered(solveColumn(col, acts, topology)), digital: digitalExact(col, acts) };
+          }
+          setColResults(results);
+          setEngineNote("Backend error — showing client-side JS fallback (not authoritative).");
+        }
+      } else {
+        const results = {};
+        for (let k = 0; k < effK; k++) {
+          const col = effW.map((row) => row[k]);
+          results[k] = { analog: analogRecovered(solveColumn(col, acts, topology)), digital: digitalExact(col, acts) };
+        }
+        setColResults(results);
+        setEngineNote("Backend offline — showing client-side JS preview. Start server.py for real results.");
+      }
+      setReadActive(false);
+      setPhase("done");
+    } else {
+      const patches = im2colPatches();
+      if (useBackend) {
+        setEngineNote(engine === "ngspice" ? "Running real ngspice simulation (all patches, one continuous sim)..." : "Querying Python golden model...");
+        try {
+          const data = await apiCall(apiBase, "/api/conv", { input_fmap: inputGrid, kernels, topology, engine });
+          const grid = Array.from({ length: outH }, () => Array.from({ length: outW }, () => null));
+          for (let p = 0; p < patches.length; p++) {
+            setPatchIdx(p);
+            await sleep(250);
+            const { oy, ox } = patches[p];
+            const out = data.outputs[p];
+            const results = {};
+            for (let k = 0; k < effK; k++) results[k] = { analog: out.analog[k], digital: out.digital[k] };
+            grid[oy][ox] = results;
+            setColResults(results);
+            setOutGrid(grid.map((r) => r.slice()));
+          }
+          setEngineNote(`${data.engine === "ngspice" ? "Real ngspice" : "Python golden model"} · ${data.cell_count} physical cells`);
+        } catch (e) {
+          setBackendError(e.message);
+          setEngineNote("Backend error during conv — no results to show. Check server.py console.");
+        }
+      } else {
+        const grid = Array.from({ length: outH }, () => Array.from({ length: outW }, () => null));
+        for (let p = 0; p < patches.length; p++) {
+          setPatchIdx(p);
+          await sleep(300);
+          const { oy, ox, patch } = patches[p];
+          const results = {};
+          for (let k = 0; k < effK; k++) {
+            const col = effW.map((row) => row[k]);
+            results[k] = { analog: analogRecovered(solveColumn(col, patch, topology)), digital: digitalExact(col, patch) };
+          }
+          grid[oy][ox] = results;
+          setColResults(results);
+          setOutGrid(grid.map((r) => r.slice()));
+        }
+        setEngineNote("Backend offline — showing client-side JS preview. Start server.py for real results.");
+      }
+      setReadActive(false); setPatchIdx(-1); setPhase("done");
+    }
+    runningRef.current = false;
+  }, [mode, topology, effM, effK, effW, acts, programOrder.length, outH, outW, backendStatus, apiBase, engine, W, kernels, inputGrid]);
+
+  const reset = () => { setPhase("idle"); setProgramIdx(-1); setReadActive(false); setColResults(null); setOutGrid(null); setPatchIdx(-1); setBackendError(null); setEngineNote(null); };
+  const randomize = () => {
+    reset();
+    if (mode === "matmul") {
+      setW(Array.from({ length: M }, () => Array.from({ length: K }, () => FP2_LEVELS[Math.floor(Math.random() * 5)])));
+      setActs(Array.from({ length: M }, () => Math.round((Math.random() * 2 - 1) * 20) / 20));
+    } else {
+      setInputGrid(Array.from({ length: inSize }, () => Array.from({ length: inSize }, () => FP2_LEVELS[Math.floor(Math.random() * 5)])));
+      setKernels(Array.from({ length: outCh }, () => Array.from({ length: kSize }, () => Array.from({ length: kSize }, () => FP2_LEVELS[Math.floor(Math.random() * 5)]))));
+    }
+  };
+
+  const cellCount = topology === "2t2r" ? 2 * effM * effK : effM * effK;
+  const bitlines = topology === "2t2r" ? 2 * effK : effK;
+
+  return (
+    <div style={{ background: COL.bg, minHeight: "100vh", fontFamily: SANS, color: COL.text }} className="p-5">
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <ZapIcon size={20} color={COL.amber} />
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>ReRAM Crossbar Visualizer</div>
+            <div style={{ fontSize: 11, color: COL.dim, fontFamily: MONO }}>FP2-E1M0 · R_LRS={R_LRS}Ω · R_MID={R_MID}Ω · R_HRS≈{Math.round(R_HRS / 1000)}kΩ</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs" style={{ fontFamily: MONO }}>
+          <input value={apiBase} onChange={(e) => setApiBase(e.target.value)} className="px-2 py-1 rounded" style={{ background: COL.panel2, border: `1px solid ${COL.border}`, color: COL.text, width: 200 }} />
+          <button onClick={refreshStatus} className="px-2 py-1 rounded" style={{ background: COL.panel2, border: `1px solid ${COL.border}`, color: COL.dim }}>ping</button>
+          {backendStatus == null ? (
+            <span style={{ color: COL.dim }}>checking…</span>
+          ) : backendStatus.online ? (
+            <span style={{ color: COL.green }}>● backend online · ngspice {backendStatus.ngspice_found ? "found" : "missing"} · osdi {backendStatus.osdi_found ? "found" : "missing"}</span>
+          ) : (
+            <span style={{ color: COL.red }}>● backend offline (start server.py)</span>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
+        <div className="flex flex-col gap-4">
+          <Panel title="Engine">
+            <div className="flex gap-1 rounded-md p-1 mb-2" style={{ background: COL.panel2 }}>
+              <SegButton active={engine === "golden"} onClick={() => setEngine("golden")}>Golden (Python)</SegButton>
+              <SegButton active={engine === "ngspice"} onClick={() => setEngine("ngspice")}>Real ngspice</SegButton>
+            </div>
+            {engine === "ngspice" && !(backendStatus && backendStatus.ngspice_found) && (
+              <div style={{ fontSize: 11, color: COL.red }}>ngspice not detected by backend — check --ngspice-bin when starting server.py.</div>
+            )}
+            {engine === "ngspice" && backendStatus && backendStatus.ngspice_found && !backendStatus.osdi_found && (
+              <div style={{ fontSize: 11, color: COL.red }}>OSDI model not found — check --osdi path when starting server.py.</div>
+            )}
+          </Panel>
+
+          <Panel title="Mode">
+            <div className="flex gap-1 rounded-md p-1" style={{ background: COL.panel2 }}>
+              <SegButton active={mode === "matmul"} onClick={() => { setMode("matmul"); reset(); }}>Matrix multiply</SegButton>
+              <SegButton active={mode === "conv"} onClick={() => { setMode("conv"); reset(); }}>Convolution</SegButton>
+            </div>
+          </Panel>
+
+          <Panel title="Topology">
+            <div className="flex gap-1 rounded-md p-1 mb-2" style={{ background: COL.panel2 }}>
+              <SegButton active={topology === "2t2r"} onClick={() => { setTopology("2t2r"); reset(); }}>2T2R (signed)</SegButton>
+              <SegButton active={topology === "1t1r"} onClick={() => { setTopology("1t1r"); reset(); }}>1T1R (unsigned)</SegButton>
+            </div>
+            {topology === "1t1r" && <div style={{ fontSize: 11, color: COL.red, lineHeight: 1.4 }}>Negative weights can't be represented — cells outlined red are clipped to 0.</div>}
+          </Panel>
+
+          {mode === "matmul" ? (
+            <Panel title="Dimensions">
+              <div className="flex flex-col gap-2">
+                <Stepper label="M (inputs)" value={M} min={1} max={8} onChange={(v) => { setM(v); resizeMatmul(v, K); reset(); }} />
+                <Stepper label="K (outputs)" value={K} min={1} max={4} onChange={(v) => { setK(v); resizeMatmul(M, v); reset(); }} />
+              </div>
+            </Panel>
+          ) : (
+            <Panel title="Dimensions">
+              <div className="flex flex-col gap-2">
+                <Stepper label="Input N×N" value={inSize} min={2} max={6} onChange={(v) => { setInSize(v); resizeConv(v, kSize, outCh); reset(); }} />
+                <Stepper label="Kernel k×k" value={kSize} min={2} max={3} onChange={(v) => { setKSize(v); resizeConv(inSize, v, outCh); reset(); }} />
+                <Stepper label="Output channels" value={outCh} min={1} max={3} onChange={(v) => { setOutCh(v); resizeConv(inSize, kSize, v); reset(); }} />
+              </div>
+            </Panel>
+          )}
+
+          <Panel title="Weights & inputs">
+            {mode === "matmul" ? (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <div style={{ fontSize: 11, color: COL.dim, marginBottom: 6 }}>Weight matrix (click to cycle)</div>
+                  <div style={{ display: "inline-grid", gridTemplateColumns: `repeat(${K}, 32px)`, gap: 4 }}>
+                    {W.map((row, i) => row.map((v, k) => (
+                      <WeightChip key={`${i}-${k}`} value={v} size={32} flag={topology === "1t1r" && quantize(v) < 0}
+                        onClick={() => setW((prev) => prev.map((r, ri) => ri === i ? r.map((c, ci) => ci === k ? cycleFP2(c) : c) : r))} />
+                    )))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: COL.dim, marginBottom: 6 }}>Activations (−1 to 1)</div>
+                  {acts.map((a, i) => (
+                    <div key={i} className="flex items-center gap-2 mb-1">
+                      <span style={{ fontFamily: MONO, fontSize: 10, color: COL.dim, width: 24 }}>in{i}</span>
+                      <input type="range" min={-1} max={1} step={0.05} value={a} onChange={(e) => setActs((prev) => prev.map((x, xi) => xi === i ? parseFloat(e.target.value) : x))} className="flex-1" />
+                      <span style={{ fontFamily: MONO, fontSize: 11, width: 34, textAlign: "right" }}>{a.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <div style={{ fontSize: 11, color: COL.dim, marginBottom: 6 }}>Input feature map</div>
+                  <GridEditor grid={inputGrid} cellSize={30}
+                    highlight={activePatch ? (i, j) => i >= activePatch.oy && i < activePatch.oy + kSize && j >= activePatch.ox && j < activePatch.ox + kSize : null}
+                    onCycle={(i, j) => setInputGrid((prev) => prev.map((r, ri) => ri === i ? r.map((c, ci) => ci === j ? cycleFP2(c) : c) : r))} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: COL.dim, marginBottom: 6 }}>Kernels (per output channel)</div>
+                  <div className="flex gap-4 flex-wrap">
+                    {kernels.map((kern, o) => (
+                      <div key={o}>
+                        <div style={{ fontSize: 10, color: COL.dim, marginBottom: 3 }}>ch{o}</div>
+                        <GridEditor grid={kern} cellSize={28} onCycle={(i, j) => setKernels((prev) => prev.map((k2, oi) => oi === o ? k2.map((r, ri) => ri === i ? r.map((c, ci) => ci === j ? cycleFP2(c) : c) : r) : k2))} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Panel>
+
+          <div className="flex gap-2">
+            <button onClick={runAnimation} disabled={phase === "programming" || phase === "reading"}
+              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-semibold"
+              style={{ background: COL.amber, color: "#12100a", opacity: (phase === "programming" || phase === "reading") ? 0.5 : 1 }}>
+              <PlayIcon size={14} /> Program &amp; read
+            </button>
+            <button onClick={reset} className="px-3 py-2 rounded-md" style={{ background: COL.panel2, border: `1px solid ${COL.border}` }}><ResetIcon size={14} color={COL.dim} /></button>
+            <button onClick={randomize} className="px-3 py-2 rounded-md" style={{ background: COL.panel2, border: `1px solid ${COL.border}` }}><ShuffleIcon size={14} color={COL.dim} /></button>
+          </div>
+          {engineNote && <div style={{ fontSize: 11, color: COL.dim }}>{engineNote}</div>}
+          {backendError && <div style={{ fontSize: 11, color: COL.red }}>Error: {backendError}</div>}
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <Panel title={`Crossbar array — ${effM} rows × ${effK} cols (${topology.toUpperCase()}) — ${cellCount} physical cells, ${bitlines} bitlines`}>
+            <div className="overflow-x-auto">
+              <CrossbarView M={effM} K={effK} topology={topology} W={effW} activations={mode === "matmul" ? acts : (activePatch ? activePatch.patch : Array(effM).fill(0))}
+                phase={phase} programIdx={programIdx} programOrder={programOrder} readActive={readActive} colResults={colResults}
+                selectedCell={selectedCell} onSelectCell={(i, k) => setSelectedCell({ i, k })} />
+            </div>
+            <div className="flex items-center gap-4 mt-2" style={{ fontSize: 10, color: COL.dim }}>
+              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, borderRadius: 3, background: COL.amber, display: "inline-block" }} /> low R (LRS)</span>
+              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, borderRadius: 3, background: COL.off, display: "inline-block", border: `1px solid ${COL.border}` }} /> high R (HRS/off)</span>
+              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, borderRadius: 3, border: `2px solid ${COL.green}`, display: "inline-block" }} /> programming now</span>
+              {phase === "programming" && <span style={{ marginLeft: "auto", fontFamily: MONO }}>{programIdx + 1}/{programOrder.length} cells</span>}
+              {phase === "reading" && mode === "conv" && <span style={{ marginLeft: "auto", fontFamily: MONO }}>patch {patchIdx + 1}/{outH * outW}</span>}
+            </div>
+            <div style={{ fontSize: 10, color: COL.dim, marginTop: 6 }}>Click any cell above to inspect its data path below.</div>
+          </Panel>
+
+          <DataPathPanel selCell={selectedCell} W={effW} getActivation={getActivation} topology={topology}
+            colResult={colResults ? colResults[selectedCell.k] : null}
+            activePatchLabel={mode === "conv" && activePatch ? `patch (${activePatch.oy},${activePatch.ox})` : null} />
+
+          {mode === "conv" && (
+            <Panel title="Output feature map">
+              <div className="flex gap-6 flex-wrap">
+                {Array.from({ length: effK }).map((_, ch) => (
+                  <div key={ch}>
+                    <div style={{ fontSize: 10, color: COL.dim, marginBottom: 3 }}>channel {ch}</div>
+                    <div style={{ display: "inline-grid", gridTemplateColumns: `repeat(${outW}, 54px)`, gap: 4 }}>
+                      {Array.from({ length: outH }).flatMap((_, oy) => Array.from({ length: outW }).map((_, ox) => {
+                        const cell = outGrid && outGrid[oy] && outGrid[oy][ox];
+                        return (
+                          <div key={`${oy}-${ox}`} className="rounded-md flex flex-col items-center justify-center" style={{ width: 54, height: 40, background: COL.panel2, border: `1px solid ${COL.border}`, fontFamily: MONO, fontSize: 10 }}>
+                            {cell ? (<><span style={{ color: COL.green }}>{cell[ch].analog.toFixed(2)}</span><span style={{ color: COL.dim, fontSize: 9 }}>d:{cell[ch].digital.toFixed(2)}</span></>) : <span style={{ color: COL.dim }}>—</span>}
+                          </div>
+                        );
+                      }))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
+
+          <Panel title="Digital vs. analog readout">
+            {mode === "matmul" ? (
+              <table style={{ width: "100%", fontFamily: MONO, fontSize: 12, borderCollapse: "collapse" }}>
+                <thead><tr style={{ color: COL.dim, textAlign: "right" }}><th style={{ textAlign: "left", fontWeight: 400, paddingBottom: 6 }}>out</th><th style={{ fontWeight: 400, paddingBottom: 6 }}>digital</th><th style={{ fontWeight: 400, paddingBottom: 6 }}>analog</th><th style={{ fontWeight: 400, paddingBottom: 6 }}>error</th></tr></thead>
+                <tbody>
+                  {Array.from({ length: K }).map((_, k) => {
+                    const r = colResults && colResults[k];
+                    const err = r ? Math.abs(r.analog - r.digital) : null;
+                    return (
+                      <tr key={k} style={{ borderTop: `1px solid ${COL.border}` }}>
+                        <td style={{ padding: "5px 0", color: COL.dim }}>out{k}</td>
+                        <td style={{ textAlign: "right" }}>{r ? r.digital.toFixed(3) : "—"}</td>
+                        <td style={{ textAlign: "right", color: COL.green }}>{r ? r.analog.toFixed(3) : "—"}</td>
+                        <td style={{ textAlign: "right", color: err > 0.15 ? COL.red : COL.dim }}>{err != null ? err.toFixed(3) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{ fontSize: 12, color: COL.dim, fontFamily: SANS }}>See output feature map above — each cell shows analog (green) vs digital-exact (gray) per channel.</div>
+            )}
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =====================================================================
+   ACCELERATOR DASHBOARD
+   Everything the benchmarking / QAT / ngspice / hw-model pipeline
+   produces, in one place. The Crossbar Explorer tab above is about ONE
+   tile; this tab is about the whole ResNet-18 mapping.
+===================================================================== */
+const { useMemo } = React;
+
+async function apiGet(base, path) {
+  const r = await fetch(base + path);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+  return r.json();
+}
+
+const fmt = (v, d = 2) =>
+  v === null || v === undefined || Number.isNaN(v) ? "—" :
+  (typeof v === "number" ? (Math.abs(v) < 1e-3 && v !== 0 ? v.toExponential(2) : v.toFixed(d)) : v);
+
+function Card({ title, subtitle, right, children, pad = 14 }) {
+  return (
+    <div style={{ background: COL.panel, border: `1px solid ${COL.border}`, borderRadius: 10, padding: pad, marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: subtitle ? 2 : 10 }}>
+        <div style={{ fontFamily: SANS, fontSize: 13, fontWeight: 600, color: COL.text }}>{title}</div>
+        <div>{right}</div>
+      </div>
+      {subtitle && <div style={{ fontFamily: SANS, fontSize: 11, color: COL.dim, marginBottom: 10, lineHeight: 1.5 }}>{subtitle}</div>}
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children, w }) {
+  return (
+    <label style={{ display: "inline-flex", flexDirection: "column", gap: 3, marginRight: 10, marginBottom: 8, width: w }}>
+      <span style={{ fontFamily: SANS, fontSize: 10, color: COL.dim, textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputStyle = { background: COL.panel2, border: `1px solid ${COL.border}`, color: COL.text, borderRadius: 5, padding: "4px 7px", fontFamily: MONO, fontSize: 12 };
+
+function Num({ value, onChange, step = 1, w = 84 }) {
+  return <input type="number" step={step} value={value} onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))} style={{ ...inputStyle, width: w }} />;
+}
+function Sel({ value, onChange, options, w = 190 }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} style={{ ...inputStyle, width: w }}>
+      {options.map((o) => <option key={o.value ?? o} value={o.value ?? o}>{o.label ?? o}</option>)}
+    </select>
+  );
+}
+function Btn({ onClick, children, kind = "amber", disabled }) {
+  const c = { amber: COL.amber, cyan: COL.cyan, red: COL.red, dim: COL.dim }[kind];
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{ background: disabled ? COL.off : "transparent", border: `1px solid ${disabled ? COL.border : c}`, color: disabled ? COL.dim : c, borderRadius: 6, padding: "5px 12px", fontFamily: SANS, fontSize: 12, cursor: disabled ? "default" : "pointer", marginRight: 8 }}>
+      {children}
+    </button>
+  );
+}
+
+/* ---------- charts (inline SVG, no CDN) ---------- */
+function LineChart({ series, height = 210, xLog = false, xLabel = "", yLabel = "", xTickFmt = (v) => v, yTickFmt = (v) => fmt(v, 1) }) {
+  const W = 640, H = height, PAD = { l: 52, r: 14, t: 12, b: 34 };
+  const pts = series.flatMap((s) => s.points);
+  if (!pts.length) return <div style={{ color: COL.dim, fontFamily: SANS, fontSize: 12 }}>No data</div>;
+  const tx = (v) => (xLog ? Math.log10(Math.max(v, 1e-12)) : v);
+  const xs = pts.map((p) => tx(p.x)), ys = pts.map((p) => p.y).filter((v) => v !== null && !Number.isNaN(v));
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  let y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const padY = (y1 - y0) * 0.12 || 1; y0 -= padY; y1 += padY;
+  const X = (v) => PAD.l + ((tx(v) - x0) / (x1 - x0 || 1)) * (W - PAD.l - PAD.r);
+  const Y = (v) => H - PAD.b - ((v - y0) / (y1 - y0 || 1)) * (H - PAD.t - PAD.b);
+  const yTicks = Array.from({ length: 5 }, (_, i) => y0 + ((y1 - y0) * i) / 4);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+      {yTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={PAD.l} x2={W - PAD.r} y1={Y(t)} y2={Y(t)} stroke={COL.border} strokeWidth="1" />
+          <text x={PAD.l - 6} y={Y(t) + 3} textAnchor="end" fill={COL.dim} fontSize="9" fontFamily={MONO}>{yTickFmt(t)}</text>
+        </g>
+      ))}
+      {series[0].points.map((p, i) => (
+        <text key={i} x={X(p.x)} y={H - PAD.b + 14} textAnchor="middle" fill={COL.dim} fontSize="9" fontFamily={MONO}>{xTickFmt(p.x)}</text>
+      ))}
+      <text x={W / 2} y={H - 3} textAnchor="middle" fill={COL.dim} fontSize="10" fontFamily={SANS}>{xLabel}</text>
+      <text x={11} y={H / 2} textAnchor="middle" fill={COL.dim} fontSize="10" fontFamily={SANS} transform={`rotate(-90 11 ${H / 2})`}>{yLabel}</text>
+      {series.map((s, si) => (
+        <g key={si}>
+          {s.band && (
+            <path fill={s.color} opacity="0.13" d={
+              s.points.map((p, i) => `${i ? "L" : "M"}${X(p.x)},${Y(p.lo)}`).join(" ") + " " +
+              s.points.slice().reverse().map((p) => `L${X(p.x)},${Y(p.hi)}`).join(" ") + " Z"} />
+          )}
+          <path fill="none" stroke={s.color} strokeWidth="2"
+            d={s.points.filter((p) => p.y !== null).map((p, i) => `${i ? "L" : "M"}${X(p.x)},${Y(p.y)}`).join(" ")} />
+          {s.points.filter((p) => p.y !== null).map((p, i) => <circle key={i} cx={X(p.x)} cy={Y(p.y)} r="2.6" fill={s.color} />)}
+        </g>
+      ))}
+      <g transform={`translate(${PAD.l + 6},${PAD.t + 4})`}>
+        {series.map((s, i) => (
+          <g key={i} transform={`translate(0,${i * 13})`}>
+            <rect width="9" height="2.5" y="4" fill={s.color} />
+            <text x="14" y="8" fill={COL.dim} fontSize="10" fontFamily={SANS}>{s.name}</text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+function GroupedBars({ rows, labelKey, keys, colors, height = 240, yLabel = "" }) {
+  const W = 900, H = height, PAD = { l: 46, r: 10, t: 12, b: 76 };
+  if (!rows.length) return <div style={{ color: COL.dim, fontFamily: SANS, fontSize: 12 }}>No data</div>;
+  const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => v !== null && !Number.isNaN(v));
+  const y1 = Math.max(...vals, 0), y0 = Math.min(...vals, 0);
+  const Y = (v) => H - PAD.b - ((v - y0) / (y1 - y0 || 1)) * (H - PAD.t - PAD.b);
+  const gw = (W - PAD.l - PAD.r) / rows.length, bw = Math.max((gw - 6) / keys.length, 1.5);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+      {Array.from({ length: 5 }, (_, i) => y0 + ((y1 - y0) * i) / 4).map((t, i) => (
+        <g key={i}>
+          <line x1={PAD.l} x2={W - PAD.r} y1={Y(t)} y2={Y(t)} stroke={COL.border} />
+          <text x={PAD.l - 5} y={Y(t) + 3} textAnchor="end" fill={COL.dim} fontSize="9" fontFamily={MONO}>{fmt(t, 1)}</text>
+        </g>
+      ))}
+      {rows.map((r, ri) => (
+        <g key={ri}>
+          {keys.map((k, ki) => r[k] === null || Number.isNaN(r[k]) ? null : (
+            <rect key={ki} x={PAD.l + ri * gw + 3 + ki * bw} width={bw - 1}
+              y={Math.min(Y(r[k]), Y(0))} height={Math.max(Math.abs(Y(r[k]) - Y(0)), 0.5)} fill={colors[ki]} opacity="0.88">
+              <title>{`${r[labelKey]}  ${k} = ${fmt(r[k], 3)}`}</title>
+            </rect>
+          ))}
+          <text x={PAD.l + ri * gw + gw / 2} y={H - PAD.b + 6} fill={COL.dim} fontSize="8.5" fontFamily={MONO}
+            textAnchor="end" transform={`rotate(-52 ${PAD.l + ri * gw + gw / 2} ${H - PAD.b + 6})`}>
+            {String(r[labelKey]).replace("layer", "L").replace("downsample.0", "ds")}
+          </text>
+        </g>
+      ))}
+      <text x={11} y={H / 2} textAnchor="middle" fill={COL.dim} fontSize="10" fontFamily={SANS} transform={`rotate(-90 11 ${H / 2})`}>{yLabel}</text>
+      <g transform={`translate(${PAD.l + 8},${PAD.t})`}>
+        {keys.map((k, i) => (
+          <g key={i} transform={`translate(${i * 132},0)`}>
+            <rect width="9" height="9" fill={colors[i]} />
+            <text x="13" y="8.5" fill={COL.dim} fontSize="10" fontFamily={SANS}>{k}</text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+function Table({ rows, columns, maxH = 320 }) {
+  if (!rows.length) return <div style={{ color: COL.dim, fontFamily: SANS, fontSize: 12 }}>No rows</div>;
+  const cols = columns || Object.keys(rows[0]);
+  return (
+    <div style={{ maxHeight: maxH, overflow: "auto", border: `1px solid ${COL.border}`, borderRadius: 6 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: MONO, fontSize: 11 }}>
+        <thead style={{ position: "sticky", top: 0, background: COL.panel2 }}>
+          <tr>{cols.map((c) => (
+            <th key={c} style={{ textAlign: typeof rows[0][c] === "number" ? "right" : "left", padding: "6px 8px", color: COL.dim, fontWeight: 500, whiteSpace: "nowrap", borderBottom: `1px solid ${COL.border}` }}>{c}</th>
+          ))}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} style={{ borderTop: `1px solid ${COL.border}` }}>
+              {cols.map((c) => (
+                <td key={c} style={{ padding: "4px 8px", textAlign: typeof r[c] === "number" ? "right" : "left", color: r.__hl && r.__hl[c] ? r.__hl[c] : COL.text, whiteSpace: "nowrap" }}>
+                  {typeof r[c] === "number" ? fmt(r[c], 3) : (r[c] ?? "—")}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ---------- panels ---------- */
+function EnvStrip({ base }) {
+  const [env, setEnv] = useState(null), [err, setErr] = useState(null);
+  useEffect(() => { apiGet(base, "/api/env").then(setEnv).catch((e) => setErr(e.message)); }, [base]);
+  if (err) return <div style={{ color: COL.red, fontFamily: SANS, fontSize: 12, marginBottom: 12 }}>Backend unreachable at {base} — start it with <code>python3 server.py</code>. ({err})</div>;
+  if (!env) return null;
+  const chip = (ok, label) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginRight: 14, fontFamily: SANS, fontSize: 11, color: COL.dim }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: ok ? COL.green : COL.red }} />{label}
+    </span>
+  );
+  return (
+    <div style={{ background: COL.panel, border: `1px solid ${COL.border}`, borderRadius: 8, padding: "9px 13px", marginBottom: 14, display: "flex", flexWrap: "wrap", alignItems: "center" }}>
+      {chip(env.ngspice.found, `ngspice ${env.ngspice.found ? env.ngspice.path : "missing"}`)}
+      {chip(env.torch, "torch")}
+      {chip(env.cuda, env.gpu || "no CUDA")}
+      {chip(env.hw_model, "hw_model")}
+      <span style={{ fontFamily: MONO, fontSize: 10.5, color: COL.dim, marginLeft: "auto" }}>
+        R_LRS {fmt(env.device_params.r_lrs, 1)}Ω · R_HRS {fmt(env.device_params.r_hrs, 0)}Ω · on/off {fmt(env.device_params.on_off_ratio, 0)}× · {env.cpu_count} cores
+      </span>
+    </div>
+  );
+}
+
+function ResultsPanel({ base, artifacts }) {
+  const csvs = artifacts.filter((a) => (a.columns || []).includes("snr_analog_db")).map((a) => a.name);
+  const [a, setA] = useState(""), [b, setB] = useState("");
+  const [rowsA, setRowsA] = useState([]), [rowsB, setRowsB] = useState([]);
+  useEffect(() => { if (!a && csvs.length) setA(csvs[csvs.length - 1]); }, [csvs.join()]);
+  useEffect(() => { if (a) apiGet(base, `/api/csv/${a}`).then((d) => setRowsA(d.rows)).catch(() => setRowsA([])); }, [a, base]);
+  useEffect(() => { if (b) apiGet(base, `/api/csv/${b}`).then((d) => setRowsB(d.rows)).catch(() => setRowsB([])); else setRowsB([]); }, [b, base]);
+
+  const gapStats = useMemo(() => {
+    if (!rowsA.length) return null;
+    const g = rowsA.map((r) => r.snr_digital_db - r.snr_analog_db);
+    const mean = g.reduce((s, v) => s + v, 0) / g.length;
+    const worse = g.filter((v) => v > 0).length;
+    const dig = rowsA.map((r) => r.snr_digital_db), ana = rowsA.map((r) => r.snr_analog_db);
+    const spread = (v) => Math.max(...v) - Math.min(...v);
+    return { mean, worse, n: g.length, digSpread: spread(dig), anaSpread: spread(ana),
+             slope: spread(ana) / (spread(dig) || 1), anaMax: Math.max(...ana) };
+  }, [rowsA]);
+
+  const delta = useMemo(() => {
+    if (!rowsA.length || !rowsB.length) return null;
+    const mapB = Object.fromEntries(rowsB.map((r) => [r.layer, r]));
+    const keys = ["snr_digital_db", "snr_analog_db", "relerr_analog_pct", "cell_utilization_pct"];
+    const rows = rowsA.filter((r) => mapB[r.layer]).map((r) => {
+      const o = { layer: r.layer }; const hl = {};
+      keys.forEach((k) => { const d = mapB[r.layer][k] - r[k]; o["Δ " + k] = d; hl["Δ " + k] = d > 0 ? COL.green : d < 0 ? COL.red : COL.dim; });
+      o.__hl = hl; return o;
+    });
+    const summary = keys.map((k) => {
+      const d = rows.map((r) => r["Δ " + k]);
+      const mean = d.reduce((s, v) => s + v, 0) / d.length;
+      const sd = Math.sqrt(d.reduce((s, v) => s + (v - mean) ** 2, 0) / (d.length - 1 || 1));
+      return { metric: k, mean, sd, up: d.filter((v) => v > 0).length, down: d.filter((v) => v < 0).length,
+               verdict: Math.abs(mean) < sd / Math.sqrt(d.length) * 2 ? "indistinguishable from zero" : "real effect" };
+    });
+    return { rows, summary };
+  }, [rowsA, rowsB]);
+
+  return (
+    <>
+      <Card title="Per-layer fidelity"
+        subtitle="SNR of the FP2-quantized dot product (digital, noiseless) and of the same weights through the resistive-divider crossbar (analog), both measured against FP32."
+        right={<Sel value={a} onChange={setA} options={csvs} w={260} />}>
+        <GroupedBars rows={rowsA} labelKey="layer" keys={["snr_digital_db", "snr_analog_db"]}
+          colors={[COL.amber, COL.cyan]} yLabel="SNR (dB)" />
+        {gapStats && (
+          <div style={{ fontFamily: SANS, fontSize: 11.5, color: COL.dim, lineHeight: 1.65, marginTop: 8, borderTop: `1px solid ${COL.border}`, paddingTop: 9 }}>
+            Analog is worse than digital in <b style={{ color: COL.text }}>{gapStats.worse}/{gapStats.n}</b> layers,
+            mean gap <b style={{ color: COL.text }}>{fmt(gapStats.mean, 2)} dB</b>.
+            Digital spans {fmt(gapStats.digSpread, 2)} dB but analog only {fmt(gapStats.anaSpread, 2)} dB —
+            the crossbar returns about <b style={{ color: COL.amber }}>{fmt(gapStats.slope, 2)} dB of analog SNR per dB of digital SNR</b>,
+            asymptoting near {fmt(gapStats.anaMax, 1)} dB.
+            {gapStats.slope < 0.75 && " Quantization is no longer your bottleneck — the circuit is. Use the Sweep tab to attack R_sense and tile height."}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Compare two runs" subtitle="Pick a control and a treatment (e.g. pre-QAT vs post-QAT). A mean shift smaller than 2 standard errors is reported as indistinguishable from zero, because at this per-layer spread it is."
+        right={<Sel value={b} onChange={setB} options={[{ value: "", label: "— none —" }, ...csvs.map((c) => ({ value: c, label: c }))]} w={260} />}>
+        {!delta ? <div style={{ color: COL.dim, fontFamily: SANS, fontSize: 12 }}>Choose a second CSV to diff against <code>{a}</code>.</div> : (
+          <>
+            <Table rows={delta.summary.map((s) => ({ metric: s.metric, mean: s.mean, sd: s.sd, "up/down": `${s.up}/${s.down}`, verdict: s.verdict }))} maxH={170} />
+            <div style={{ height: 10 }} />
+            <Table rows={delta.rows} maxH={240} />
+          </>
+        )}
+      </Card>
+
+      <Card title="Raw table" right={<span style={{ fontFamily: MONO, fontSize: 10.5, color: COL.dim }}>{a}</span>}>
+        <Table rows={rowsA} maxH={340} />
+      </Card>
+    </>
+  );
+}
+
+function QatPanel({ base, artifacts }) {
+  const files = artifacts.filter((a) => (a.columns || []).includes("test_acc")).map((a) => a.name);
+  const [f, setF] = useState(""), [rows, setRows] = useState([]);
+  useEffect(() => { if (!f && files.length) setF(files[0]); }, [files.join()]);
+  useEffect(() => { if (f) apiGet(base, `/api/csv/${f}`).then((d) => setRows(d.rows)).catch(() => setRows([])); }, [f, base]);
+  if (!files.length) return <Card title="QAT history" subtitle="No qat_history.csv found. Run qat_finetune_fp2.py with --log-csv."><div /></Card>;
+  const flat = rows.length > 1 && Math.abs(rows[rows.length - 1].cell_utilization_pct - rows[0].cell_utilization_pct) < 1.0;
+  return (
+    <Card title="QAT fine-tuning history" right={<Sel value={f} onChange={setF} options={files} w={220} />}
+      subtitle="Test accuracy against the two quantization-health metrics. If accuracy climbs while utilization and residual stay flat, QAT is adapting the network around a fixed quantization noise floor rather than shrinking it — which means it will not improve your crossbar numbers.">
+      <LineChart height={230} xLabel="epoch" yLabel="%"
+        series={[
+          { name: "test accuracy %", color: COL.green, points: rows.map((r) => ({ x: r.epoch, y: r.test_acc })) },
+          { name: "cell utilization %", color: COL.amber, points: rows.map((r) => ({ x: r.epoch, y: r.cell_utilization_pct })) },
+          { name: "quant residual %", color: COL.cyan, points: rows.map((r) => ({ x: r.epoch, y: r.quant_residual_pct })) },
+        ]} />
+      {rows.length > 1 && (
+        <div style={{ fontFamily: SANS, fontSize: 11.5, color: COL.dim, lineHeight: 1.6, marginTop: 8, borderTop: `1px solid ${COL.border}`, paddingTop: 9 }}>
+          Accuracy {fmt(rows[0].test_acc, 2)}% → <b style={{ color: COL.text }}>{fmt(rows[rows.length - 1].test_acc, 2)}%</b>.
+          Utilization {fmt(rows[0].cell_utilization_pct, 1)}% → {fmt(rows[rows.length - 1].cell_utilization_pct, 1)}%,
+          residual {fmt(rows[0].quant_residual_pct, 1)}% → {fmt(rows[rows.length - 1].quant_residual_pct, 1)}%.
+          {flat && <b style={{ color: COL.amber }}> The quantization metrics are flat — expect no crossbar-level improvement from this run.</b>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function SweepPanel({ base }) {
+  const [v, setV] = useState("r_sense");
+  const [M, setM] = useState(32), [K, setK] = useState(16);
+  const [rs, setRs] = useState(20), [util, setUtil] = useState(0.42), [seeds, setSeeds] = useState(3);
+  const [res, setRes] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState(null);
+  const run = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(base + "/api/sweep", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ variable: v, M, K, r_sense: rs, utilization: util, n_seeds: seeds }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setRes(d);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const best = res && res.points.reduce((a, p) => (p.snr_db > (a?.snr_db ?? -1e9) ? p : a), null);
+  return (
+    <Card title="Circuit sweep explorer"
+      subtitle="Where the crossbar's own error comes from. SYNTHETIC weights and activations — the shape of these curves is set by the resistive-divider physics and transfers, the absolute dB values do not. For real per-layer numbers launch benchmark_resnet18.py from Jobs.">
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Field label="sweep"><Sel value={v} onChange={setV} options={[
+          { value: "r_sense", label: "R_sense (bitline load)" },
+          { value: "M", label: "tile height M" },
+          { value: "utilization", label: "cell utilization" }]} w={210} /></Field>
+        <Field label="M"><Num value={M} onChange={setM} /></Field>
+        <Field label="K"><Num value={K} onChange={setK} /></Field>
+        <Field label="R_sense Ω"><Num value={rs} onChange={setRs} /></Field>
+        <Field label="utilization"><Num value={util} onChange={setUtil} step={0.01} /></Field>
+        <Field label="seeds"><Num value={seeds} onChange={setSeeds} w={60} /></Field>
+        <div style={{ marginBottom: 8 }}><Btn onClick={run} disabled={busy}>{busy ? "running…" : "Run sweep"}</Btn></div>
+      </div>
+      {err && <div style={{ color: COL.red, fontFamily: SANS, fontSize: 12 }}>{err}</div>}
+      {res && (
+        <>
+          <LineChart height={230} xLog={v === "r_sense" || v === "M"}
+            xLabel={{ r_sense: "R_sense (Ω, log)", M: "tile height M (log)", utilization: "cell utilization" }[res.variable]}
+            yLabel="analog SNR vs digital (dB)"
+            xTickFmt={(x) => (x >= 1 ? String(x) : x.toFixed(2))}
+            series={[{ name: "SNR (min–max over seeds)", color: COL.cyan, band: true,
+              points: res.points.map((p) => ({ x: p.value, y: p.snr_db, lo: p.snr_min, hi: p.snr_max })) }]} />
+          <div style={{ fontFamily: SANS, fontSize: 11.5, color: COL.dim, lineHeight: 1.6, marginTop: 8 }}>
+            Best point: <b style={{ color: COL.text }}>{res.variable} = {best.value}</b> at {fmt(best.snr_db, 2)} dB.
+            {res.variable === "r_sense" && " Lowering R_sense reduces bitline loading and raises SNR, but shrinks the sense voltage the ADC has to resolve — the ADC-input-referred noise this sweep does not model sets the real floor."}
+            {res.variable === "M" && " Shorter columns load less and read cleaner, but cost more ADC conversions per MAC. Cross-reference the Hardware tab's M sweep: these two curves move in opposite directions and their crossing is your tile size."}
+          </div>
+          <div style={{ height: 10 }} />
+          <Table rows={res.points.map((p) => ({ [res.variable]: p.value, snr_db: p.snr_db, snr_min: p.snr_min, snr_max: p.snr_max, rel_err_pct: p.rel_err_pct, cell_util_pct: p.cell_util_pct }))} maxH={200} />
+        </>
+      )}
+    </Card>
+  );
+}
+
+function HwPanel({ base, artifacts }) {
+  const csvs = artifacts.filter((a) => (a.columns || []).includes("cell_utilization_pct")).map((a) => a.name);
+  const pcsvs = artifacts.filter((a) => (a.columns || []).includes("power_mean_uw")).map((a) => a.name);
+  const [lc, setLc] = useState(""), [pc, setPc] = useState("");
+  const [tm, setTm] = useState(32), [tk, setTk] = useState(16), [adc, setAdc] = useState(8), [node, setNode] = useState(65);
+  const [phys, setPhys] = useState(0);
+  const [res, setRes] = useState(null), [sw, setSw] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false);
+  useEffect(() => { if (!lc && csvs.length) setLc(csvs[csvs.length - 1]); }, [csvs.join()]);
+
+  const call = async (sweep) => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(base + "/api/hwmodel", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layers_csv: lc, power_csv: pc || null, tile_m: tm, tile_k: tk, sweep_m: sweep,
+          physical_tiles: phys, assumptions: { ADC_BITS: adc, TECH_F_NM: node } }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      if (sweep) setSw(d.sweep_m); else setRes(d);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const R = res && res.result, A = R && R.area;
+  return (
+    <>
+      <Card title="Area · power · delay"
+        subtitle="Array power is MEASURED by ngspice when you supply a power CSV; everything else is a closed-form model on literature-typical assumptions. Replace TECH_F_NM / CELL_AREA_F2 / the ADC constants in hw_model.py with PDK data before publishing any of this.">
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end" }}>
+          <Field label="layers csv"><Sel value={lc} onChange={setLc} options={csvs} w={250} /></Field>
+          <Field label="ngspice power csv"><Sel value={pc} onChange={setPc} options={[{ value: "", label: "— modelled —" }, ...pcsvs.map((c) => ({ value: c, label: c }))]} w={220} /></Field>
+          <Field label="tile M"><Num value={tm} onChange={setTm} /></Field>
+          <Field label="tile K"><Num value={tk} onChange={setTk} /></Field>
+          <Field label="ADC bits"><Num value={adc} onChange={setAdc} w={64} /></Field>
+          <Field label="node nm"><Num value={node} onChange={setNode} w={64} /></Field>
+          <Field label="phys tiles (0=all)"><Num value={phys} onChange={setPhys} w={90} /></Field>
+          <div style={{ marginBottom: 8 }}>
+            <Btn onClick={() => call(false)} disabled={busy || !lc}>Model</Btn>
+            <Btn kind="cyan" onClick={() => call(true)} disabled={busy || !lc}>Sweep M</Btn>
+          </div>
+        </div>
+        {err && <div style={{ color: COL.red, fontFamily: SANS, fontSize: 12 }}>{err}</div>}
+        {R && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10, marginBottom: 12 }}>
+              {[["total area", `${fmt(A.total_mm2, 3)} mm²`], ["energy / MAC", `${fmt(R.pj_per_mac, 4)} pJ`],
+                ["throughput", `${fmt(R.tops, 2)} TOPS`], ["efficiency", `${fmt(R.tops_per_w, 1)} TOPS/W`],
+                ["density", `${fmt(R.tops_per_mm2, 2)} TOPS/mm²`], ["tile read", `${fmt(res.delay.t_tile_ns, 3)} ns`],
+                ["tiles", R.total_tiles], ["ADC share of area", `${fmt(100 * A.adc_frac, 1)}%`]].map(([k, val]) => (
+                <div key={k} style={{ background: COL.panel2, border: `1px solid ${COL.border}`, borderRadius: 7, padding: "8px 10px" }}>
+                  <div style={{ fontFamily: SANS, fontSize: 10, color: COL.dim, textTransform: "uppercase", letterSpacing: 0.4 }}>{k}</div>
+                  <div style={{ fontFamily: MONO, fontSize: 15, color: COL.amber, marginTop: 2 }}>{val}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontFamily: SANS, fontSize: 11.5, color: COL.dim, lineHeight: 1.6, marginBottom: 10 }}>
+              {R.reuse_factor > 1
+                ? <span>{R.total_tiles} logical tiles time-multiplexed over <b style={{ color: COL.text }}>{R.physical_tiles}</b> physical tiles ({fmt(R.reuse_factor, 1)}× reuse). <b style={{ color: COL.red }}>Tile reprogramming energy between passes is NOT modelled and is likely dominant at this reuse factor.</b> </span>
+                : <span>Fully weight-stationary: {R.total_tiles} physical tiles, nothing reloaded. Set "physical tiles" above to time-multiplex. </span>}
+              Array power measured for <b style={{ color: res.power_measured_layers ? COL.green : COL.red }}>{res.power_measured_layers}/{res.total_layers}</b> layers.
+              Bitline settling is {fmt(100 * res.delay.settle_frac, 2)}% of tile time — the ADC's {fmt(res.delay.t_adc_ns, 2)} ns conversion dominates.
+              {A.adc_frac > 0.5 && <b style={{ color: COL.amber }}> The ADC, not the ReRAM array, is your area and energy budget. Raising tile M amortizes it.</b>}
+            </div>
+            <Table rows={R.per_layer.map((r) => ({ layer: r.layer, tiles: r.tiles, "t_tile(ns)": r.t_tile_ns,
+              "E(nJ)": r.energy_nj, "fJ/MAC": r.fj_per_mac, "ADC%E": 100 * r.adc_energy_frac,
+              "P_arr(µW)": r.array_power_uw, src: r.power_measured ? "SIM" : "MODEL" }))} maxH={300} />
+          </>
+        )}
+      </Card>
+      {sw && (
+        <Card title="Tile-height trade-off" subtitle="Energy per MAC falls with M because the ADC's fixed per-column cost amortizes over more rows. The circuit sweep on the previous tab moves the opposite way — taller columns load the bitline harder and lose SNR. Your tile size is where those cross.">
+          <LineChart height={220} xLog xLabel="tile height M (log)" yLabel="pJ / MAC"
+            series={[{ name: "energy per MAC (pJ)", color: COL.amber, points: sw.map((s) => ({ x: s.tile_m, y: s.pj_per_mac })) }]} />
+          <Table rows={sw.map((s) => ({ tile_m: s.tile_m, tiles: s.tiles, "t_tile(ns)": s.t_tile_ns, "pJ/MAC": s.pj_per_mac,
+            "ADC%E": 100 * s.adc_energy_frac, "area(mm²)": s.area_mm2, "TOPS/W": s.tops_per_w, "TOPS/mm²": s.tops_per_mm2 }))} maxH={240} />
+        </Card>
+      )}
+    </>
+  );
+}
+
+const JOB_PRESETS = [
+  { name: "Benchmark (crossbar fidelity)", script: "benchmark_resnet18.py",
+    args: ["--checkpoint", "resnet18_cifar10_fp2qat.pth", "--cifar-arch", "--num-classes", "10",
+           "--calib-dataset", "cifar10", "--calib-dir", "./data", "--skip-first-last",
+           "--max-positions", "32", "--out-csv", "results_gui.csv"] },
+  { name: "QAT fine-tune", script: "qat_finetune_fp2.py",
+    args: ["--dataset", "cifar10", "--data-dir", "./data", "--pretrain-epochs", "30", "--epochs", "10",
+           "--batch-size", "256", "--bf16", "--save-fp32-checkpoint", "resnet18_cifar10_fp32.pth",
+           "--out-checkpoint", "resnet18_cifar10_fp2qat.pth", "--log-csv", "qat_history.csv"] },
+  { name: "ngspice full sweep (dry run)", script: "ngspice_full_sweep.py",
+    args: ["--checkpoint", "resnet18_cifar10_fp2qat.pth", "--cifar-arch", "--num-classes", "10",
+           "--calib-dataset", "cifar10", "--calib-dir", "./data", "--skip-first-last",
+           "--max-positions", "32", "--dry-run"] },
+  { name: "ngspice full sweep (REAL, hours)", script: "ngspice_full_sweep.py",
+    args: ["--checkpoint", "resnet18_cifar10_fp2qat.pth", "--cifar-arch", "--num-classes", "10",
+           "--calib-dataset", "cifar10", "--calib-dir", "./data", "--skip-first-last",
+           "--max-positions", "32", "--out-jsonl", "ngspice_full.jsonl",
+           "--out-csv", "ngspice_full_summary.csv"] },
+  { name: "ngspice sweep self-test", script: "ngspice_full_sweep.py", args: ["--self-test"] },
+  { name: "hw_model self-test", script: "hw_model.py", args: ["--self-test"] },
+];
+
+function JobsPanel({ base, onArtifacts }) {
+  const [preset, setPreset] = useState(0);
+  const [args, setArgs] = useState(JOB_PRESETS[0].args.join(" "));
+  const [jobs, setJobs] = useState([]), [sel, setSel] = useState(null), [log, setLog] = useState([]), [err, setErr] = useState(null);
+  const logRef = useRef(null);
+
+  useEffect(() => { setArgs(JOB_PRESETS[preset].args.join(" ")); }, [preset]);
+  useEffect(() => {
+    const t = setInterval(() => { apiGet(base, "/api/jobs").then((d) => setJobs(d.jobs)).catch(() => {}); }, 1500);
+    return () => clearInterval(t);
+  }, [base]);
+  useEffect(() => {
+    if (!sel) return;
+    const t = setInterval(async () => {
+      try {
+        const d = await apiGet(base, `/api/jobs/${sel}`);
+        setLog(d.log);
+        if (d.status !== "running") { clearInterval(t); onArtifacts && onArtifacts(); }
+      } catch (e) { clearInterval(t); }
+    }, 1200);
+    return () => clearInterval(t);
+  }, [sel, base]);
+  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log]);
+
+  const launch = async () => {
+    setErr(null);
+    try {
+      const r = await fetch(base + "/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script: JOB_PRESETS[preset].script, args: args.split(/\s+/).filter(Boolean) }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setSel(d.id); setLog([]);
+    } catch (e) { setErr(e.message); }
+  };
+
+  return (
+    <Card title="Run jobs" subtitle="Launches the pipeline scripts in this directory as background processes and streams their output. Only the four project scripts can be launched, with character-restricted arguments — this is a local tool, not an authenticated one, so keep the server bound to 127.0.0.1.">
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Field label="preset"><Sel value={preset} onChange={(v) => setPreset(Number(v))}
+          options={JOB_PRESETS.map((p, i) => ({ value: i, label: p.name }))} w={280} /></Field>
+        <div style={{ marginBottom: 8 }}><Btn onClick={launch}>Launch</Btn></div>
+      </div>
+      <Field label={`arguments to ${JOB_PRESETS[preset].script}`} w="100%">
+        <textarea value={args} onChange={(e) => setArgs(e.target.value)} rows={3}
+          style={{ ...inputStyle, width: "100%", resize: "vertical", lineHeight: 1.5 }} />
+      </Field>
+      {err && <div style={{ color: COL.red, fontFamily: SANS, fontSize: 12, marginBottom: 8 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: "0 0 240px" }}>
+          <div style={{ fontFamily: SANS, fontSize: 10, color: COL.dim, textTransform: "uppercase", marginBottom: 5 }}>jobs</div>
+          <div style={{ maxHeight: 240, overflow: "auto", border: `1px solid ${COL.border}`, borderRadius: 6 }}>
+            {jobs.length === 0 && <div style={{ padding: 9, color: COL.dim, fontFamily: SANS, fontSize: 11.5 }}>none yet</div>}
+            {jobs.slice().reverse().map((j) => (
+              <div key={j.id} onClick={() => { setSel(j.id); setLog([]); }}
+                style={{ padding: "6px 9px", cursor: "pointer", borderBottom: `1px solid ${COL.border}`, background: sel === j.id ? COL.panel2 : "transparent" }}>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: COL.text }}>{j.script}</div>
+                <div style={{ fontFamily: SANS, fontSize: 10, color: j.status === "running" ? COL.amber : j.status === "done" ? COL.green : COL.red }}>
+                  {j.status}{j.returncode !== null ? ` (exit ${j.returncode})` : ""} · {j.lines} lines
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 320 }}>
+          <div style={{ fontFamily: SANS, fontSize: 10, color: COL.dim, textTransform: "uppercase", marginBottom: 5 }}>output</div>
+          <div ref={logRef} style={{ height: 240, overflow: "auto", background: COL.bg, border: `1px solid ${COL.border}`, borderRadius: 6, padding: 9, fontFamily: MONO, fontSize: 10.5, color: COL.text, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>
+            {log.length ? log.join("\n") : <span style={{ color: COL.dim }}>select or launch a job</span>}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function Dashboard({ base }) {
+  const [tab, setTab] = useState("results");
+  const [artifacts, setArtifacts] = useState([]);
+  const refresh = useCallback(() => {
+    apiGet(base, "/api/artifacts").then((d) => setArtifacts(d.csv)).catch(() => setArtifacts([]));
+  }, [base]);
+  useEffect(refresh, [refresh]);
+
+  const tabs = [["results", "Fidelity"], ["qat", "QAT"], ["sweep", "Circuit sweep"], ["hw", "Hardware"], ["jobs", "Jobs"]];
+  return (
+    <div style={{ padding: "0 18px 40px" }}>
+      <EnvStrip base={base} />
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        {tabs.map(([k, label]) => (
+          <button key={k} onClick={() => { setTab(k); refresh(); }}
+            style={{ background: tab === k ? COL.panel2 : "transparent", border: `1px solid ${tab === k ? COL.amber : COL.border}`,
+              color: tab === k ? COL.amber : COL.dim, borderRadius: 7, padding: "6px 14px", fontFamily: SANS, fontSize: 12, cursor: "pointer" }}>
+            {label}
+          </button>
+        ))}
+        <div style={{ marginLeft: "auto" }}><Btn kind="dim" onClick={refresh}>Refresh files</Btn></div>
+      </div>
+      {tab === "results" && <ResultsPanel base={base} artifacts={artifacts} />}
+      {tab === "qat" && <QatPanel base={base} artifacts={artifacts} />}
+      {tab === "sweep" && <SweepPanel base={base} />}
+      {tab === "hw" && <HwPanel base={base} artifacts={artifacts} />}
+      {tab === "jobs" && <JobsPanel base={base} onArtifacts={refresh} />}
+    </div>
+  );
+}
+
+function Shell() {
+  const [view, setView] = useState(() => localStorage.getItem("crossbar_view") || "explorer");
+  const [base] = useState(() => localStorage.getItem("crossbar_api_base") || "http://localhost:5057");
+  useEffect(() => { localStorage.setItem("crossbar_view", view); }, [view]);
+  return (
+    <div style={{ background: COL.bg, minHeight: "100vh" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px 0" }}>
+        {[["explorer", "Crossbar Explorer"], ["dashboard", "Accelerator Dashboard"]].map(([k, label]) => (
+          <button key={k} onClick={() => setView(k)}
+            style={{ background: view === k ? COL.amber : "transparent", border: `1px solid ${view === k ? COL.amber : COL.border}`,
+              color: view === k ? COL.bg : COL.dim, borderRadius: 8, padding: "7px 16px", fontFamily: SANS,
+              fontSize: 12.5, fontWeight: view === k ? 600 : 400, cursor: "pointer" }}>
+            {label}
+          </button>
+        ))}
+        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10.5, color: COL.dim }}>FP2-E1M0 · 2T2R ReRAM · ResNet-18</span>
+      </div>
+      {view === "explorer" ? <App /> : <Dashboard base={base} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Shell />);
+</script>
+</body>
+</html>
