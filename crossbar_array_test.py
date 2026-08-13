@@ -8,7 +8,7 @@ SIGNED WEIGHTS -- WHY DIFFERENTIAL (2T2R) NOW
     The single-cell tests this session got signed weights by flipping the
     READ voltage's polarity per cell. That only works in isolation -- on a
     real shared wordline, every cell on that row sees the SAME physical
-    voltage at the same instant, so you cannot apply +V to one cell and -V
+    voltage at the same instant, so +V cannot be applied to one cell and -V
     to its neighbor. Real signed crossbars (and this project's own name,
     EvoCIM-2T2R) use a differential pair per weight instead: R+ and R-.
     Whichever side represents the sign gets the calibrated magnitude
@@ -821,9 +821,9 @@ def random_fp2_matrix(M, K, seed=0, sparsity=0.15):
 
 def loading_error_sweep(K=8, r_sense=20.0, vread_base=0.1, m_values=(4, 8, 16, 32, 64, 128), seed=0):
     """Sweep M (holding K, r_sense fixed) and report the shared-Rsense
-    loading error at each size -- this is the number that tells you how
+    loading error at each size -- this number determines how
     big a single physical tile can be before passive Rsense readout stops
-    being good enough and you need either a smaller tile (partial sums
+    being good enough, requiring either a smaller tile (partial sums
     combined digitally across tiles) or an active virtual-ground TIA
     instead of a passive sense resistor."""
     activations = None
@@ -881,7 +881,7 @@ def main():
                           "(kernels programmed once, every output pixel gets its own read window)")
     ap.add_argument("--scale-sweep", action="store_true",
                      help="Sweep array height M and report shared-Rsense loading error at each size "
-                          "(fast, no ngspice -- tells you how big a tile can be before it needs "
+                          "(fast, no ngspice -- reports how big a tile can be before it needs "
                           "tiling or an active TIA)")
     ap.add_argument("--demo-large-matmul", action="store_true",
                      help="Generate a large fixed-resistor read-only matmul netlist (--array-m x --array-k, "
@@ -1028,7 +1028,7 @@ def main():
         print("That's almost certainly impractical to actually run at this size with the current")
         print("fully-sequential programming scheme -- real hardware (and a future version of this")
         print("script) would program all K columns of a row in parallel per row-select cycle,")
-        print(f"cutting slots from {dyn_slots} down to {M}. Not implemented yet -- flag if you want it built.")
+        print(f"cutting slots from {dyn_slots} down to {M}. Not implemented yet.")
 
     if (not args.demo_matmul and not args.demo_dynamic_matmul and not args.demo_conv
             and not args.demo_dynamic_conv and not args.scale_sweep and not args.demo_large_matmul):

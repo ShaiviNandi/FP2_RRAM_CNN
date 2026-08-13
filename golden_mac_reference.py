@@ -12,7 +12,7 @@ This is deliberately a simple, auditable resistor-network calculation, not
 a re-derivation of the Stanford compact model's physics -- it treats each
 ReRAM cell as a fixed two-state resistor (HRS/LRS) selected by the decoded
 magnitude bits, which is the right level of fidelity for checking "did the
-digital decode + crossbar wiring do what we intended", not for validating
+digital decode + crossbar wiring behave as intended", not for validating
 the analog model's own accuracy (that's what the .va model itself is for).
 
 Usage:
@@ -52,7 +52,7 @@ def decode_weight(dir_bit, mag1_bit, mag0_bit):
         mag0_bit=1                  -> weight magnitude 0.5 (cell = mid-R,
                                         approximated here as LRS for a
                                         two-state resistor model -- see
-                                        --r-mid if you need a 3rd state)
+                                        --r-mid for a 3rd state)
     Returns (signed_weight, cell_is_conducting)
     """
     if not mag1_bit and not mag0_bit:
@@ -140,7 +140,7 @@ def main():
         # This intentionally does not attempt automatic time-alignment between
         # the digital-domain vectors (ns-scale, one per clock) and the analog
         # transient's much finer timestep -- that alignment is specific to
-        # your actual PWL edge placement and should be done deliberately,
+        # the actual PWL edge placement and should be done deliberately,
         # not guessed at here.
 
 

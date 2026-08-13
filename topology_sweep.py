@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Sweep array size (M and K) for BOTH 1T1R and 2T2R topologies and plot the
-resulting error, so you can see the real tradeoff in one place instead of
+resulting error, presenting the real tradeoff in one place instead of
 picking topology and size separately.
 
 ERROR METRIC: for each (M, K, topology, seed), generate a random FP2

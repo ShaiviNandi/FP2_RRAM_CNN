@@ -20,9 +20,12 @@ accelerator running ResNet-18 inference. Compares four fidelity levels:
                                  by an actual RTL testbench run, if provided
 
 For each Conv2d layer in the model, a calibration forward pass captures the
-REAL input-activation statistics (not synthetic random activations) via
-forward hooks + `F.unfold` (im2col), so the crossbar error numbers reflect
-what that layer actually sees in inference, not a worst-case random matrix.
+input-activation statistics via forward hooks + `F.unfold` (im2col), so the
+crossbar error numbers reflect what that layer actually sees in inference.
+Pass --calib-dataset cifar10 (or imagefolder) to drive that pass with REAL
+IMAGES. The default, --calib-dataset random, drives it with Gaussian noise
+and is retained only to reproduce earlier runs; it warns, and its numbers
+should not be reported -- see build_calibration_batch() for why.
 
 Because exhaustively running every spatial output position of every layer
 through the resistive-divider model is unnecessary for a fidelity benchmark
@@ -122,11 +125,48 @@ def build_model(args):
                   "in for ResNet-18's layer shapes).", file=sys.stderr)
         return None, True
 
-    model = tv_models.resnet18(weights=None)  # no internet fetch of pretrained weights
+    num_classes = getattr(args, "num_classes", 1000)
+    model = tv_models.resnet18(weights=None, num_classes=num_classes)  # no internet fetch
+    if getattr(args, "cifar_arch", False):
+        # CIFAR ResNet-18 stem: 3x3 stride-1 conv, no maxpool. Must match the
+        # arch a qat_finetune_fp2.py checkpoint was trained with, or conv1/fc
+        # silently fail to load (strict=False), benchmarking random weights.
+        model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        model.maxpool = nn.Identity()
     if args.checkpoint:
         state = torch.load(args.checkpoint, map_location="cpu")
         state = state.get("state_dict", state) if isinstance(state, dict) else state
-        model.load_state_dict(state, strict=False)
+        # strict=False forgives MISSING and UNEXPECTED keys but still raises on
+        # a SHAPE mismatch, which is the common case here: a CIFAR checkpoint's
+        # 10-way head against this model's default 1000-way one. Rather than
+        # let torch abort with a stack trace, drop the offending tensors and
+        # name the flag that fixes it.
+        own = model.state_dict()
+        bad = {k: (tuple(v.shape), tuple(own[k].shape)) for k, v in state.items()
+               if k in own and hasattr(v, "shape") and v.shape != own[k].shape}
+        if bad:
+            print(f"WARNING: {len(bad)} tensor(s) in {args.checkpoint} have a "
+                  f"different shape than this model and were DROPPED, leaving "
+                  f"them randomly initialised:", file=sys.stderr)
+            for k, (a, b) in list(bad.items())[:6]:
+                print(f"         {k}: checkpoint {a} vs model {b}", file=sys.stderr)
+            if any(k.startswith("fc.") for k in bad):
+                n = state["fc.weight"].shape[0] if "fc.weight" in state else "N"
+                print(f"         The classifier head differs -- pass "
+                      f"--num-classes {n} to match the checkpoint. (Harmless if "
+                      f"only conv layers are benchmarked, since fc is never "
+                      f"read, but every accuracy number would be meaningless.)",
+                      file=sys.stderr)
+            state = {k: v for k, v in state.items() if k not in bad}
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        if missing or unexpected:
+            print(f"WARNING: checkpoint only partially matched the model "
+                  f"({len(missing)} missing, {len(unexpected)} unexpected keys). "
+                  f"Un-matched layers keep their RANDOM init, which silently "
+                  f"corrupts every number below. First few: "
+                  f"missing={list(missing)[:4]} unexpected={list(unexpected)[:4]}. "
+                  f"If conv1/fc are listed, pass --cifar-arch and/or --num-classes "
+                  f"to match how the checkpoint was trained.", file=sys.stderr)
     else:
         print("NOTE: no --checkpoint given; using randomly-initialized "
               "ResNet-18 weights. Layer-fidelity numbers (SNR, rel-error) "
@@ -147,6 +187,72 @@ SYNTHETIC_LAYER_SHAPES = [
     ("layer4.0.conv1", 512, 256, 3, 3, 2, 1,  14,  14),
     ("layer4.0.downsample.0", 512, 256, 1, 1, 2, 0, 14, 14),
 ]
+
+
+CIFAR10_MEAN, CIFAR10_STD = (0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)
+CIFAR100_MEAN, CIFAR100_STD = (0.5071, 0.4865, 0.4409), (0.2673, 0.2564, 0.2762)
+IMAGENET_MEAN, IMAGENET_STD = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+
+
+def build_calibration_batch(args, res):
+    """Returns the [N,3,res,res] tensor used to drive the calibration forward
+    pass whose per-layer input activations get captured by the hooks.
+
+    THIS MATTERS MORE THAN IT LOOKS. Every SNR / relative-error number this
+    script reports is E[(W x - Wq x)^2] over the x captured here. Feed the
+    network Gaussian noise, which measures quantization error against
+    activations no real inference ever produces: after BN and ReLU, a noise
+    image gives feature maps with roughly symmetric, dense, low-kurtosis
+    channel statistics, whereas real images give sparse, heavy-tailed,
+    spatially-correlated ones with a large fraction of exact zeros post-ReLU.
+    Those are different distributions and they do not yield the same MAC
+    error. Earlier revisions of this file ran `torch.randn(1,3,res,res)`
+    while the module docstring claimed "REAL input-activation statistics" --
+    that was wrong, and --calib-dataset is the fix. `random` is retained
+    only so the old numbers stay reproducible, and it warns."""
+    if args.calib_dataset == "random":
+        print("WARNING: --calib-dataset random feeds the network Gaussian NOISE, not "
+              "images. Every SNR/RelErr number below is then measured against "
+              "activations that no real inference produces. Use --calib-dataset "
+              "cifar10 (with --calib-dir) for reportable numbers.",
+              file=sys.stderr)
+        return torch.randn(args.calib_images, 3, res, res)
+
+    if not TORCHVISION_AVAILABLE:
+        raise SystemExit("--calib-dataset needs torchvision installed.")
+
+    if args.calib_dataset in ("cifar10", "cifar100"):
+        mean, std = ((CIFAR10_MEAN, CIFAR10_STD) if args.calib_dataset == "cifar10"
+                     else (CIFAR100_MEAN, CIFAR100_STD))
+        tfm = T.Compose([T.ToTensor(), T.Normalize(mean, std)])
+        ds_cls = (torchvision.datasets.CIFAR10 if args.calib_dataset == "cifar10"
+                  else torchvision.datasets.CIFAR100)
+        try:
+            ds = ds_cls(args.calib_dir, train=False, transform=tfm, download=False)
+        except Exception as e:
+            raise SystemExit(
+                f"Could not load {args.calib_dataset} from --calib-dir {args.calib_dir!r}: {e}\n"
+                f"Point --calib-dir at the directory qat_finetune_fp2.py downloaded into "
+                f"(the one containing cifar-10-batches-py/).")
+        if res != 32:
+            raise SystemExit(f"--calib-dataset {args.calib_dataset} is 32x32 but this arch "
+                             f"expects {res}x{res}. --cifar-arch may be missing.")
+    else:  # imagefolder
+        tfm = T.Compose([T.Resize(int(res * 1.14)), T.CenterCrop(res),
+                         T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
+        if not args.calib_dir:
+            raise SystemExit("--calib-dataset imagefolder requires --calib-dir")
+        ds = torchvision.datasets.ImageFolder(args.calib_dir, transform=tfm)
+
+    n = min(len(ds), args.calib_images)
+    # Stride through the set rather than taking the first N, which in a
+    # class-sorted ImageFolder would be N images of a single class.
+    step = max(len(ds) // n, 1)
+    idx = list(range(0, len(ds), step))[:n]
+    batch = torch.stack([ds[i][0] for i in idx])
+    print(f"Calibration: {n} real images from {args.calib_dataset} "
+          f"({tuple(batch.shape)}), activation stats captured from these.")
+    return batch
 
 
 def extract_conv_layers(model, args) -> list:
@@ -184,9 +290,13 @@ def extract_conv_layers(model, args) -> list:
         if isinstance(mod, nn.Conv2d):
             handles.append(mod.register_forward_hook(make_hook(name, mod)))
 
-    dummy = torch.randn(1, 3, 224, 224)
+    # Input resolution must match the arch: a CIFAR-stem ResNet-18 fed 224x224
+    # would produce 56x56 feature maps into layer4 and the captured activation
+    # statistics would not be the ones the network actually sees at inference.
+    res = 32 if getattr(args, "cifar_arch", False) else 224
+    calib = build_calibration_batch(args, res)
     with torch.no_grad():
-        model(dummy)
+        model(calib)
     for h in handles:
         h.remove()
 
@@ -201,8 +311,13 @@ def extract_conv_layers(model, args) -> list:
         stride = mod.stride[0]
         pad = mod.padding[0]
 
+        # [N, Cin*Kh*Kw, L] -> [Cin*Kh*Kw, N*L]: pool the sliding-window
+        # positions of EVERY calibration image into one column pool, so the
+        # sampled positions span the whole batch instead of coming from a
+        # single image (which would make the error estimate hostage to one
+        # picture's content).
         unfolded_full = F.unfold(x, kernel_size=(kh, kw), stride=stride, padding=pad)
-        unfolded_full = unfolded_full[0].numpy()  # [Cin*Kh*Kw, num_positions]
+        unfolded_full = unfolded_full.permute(1, 0, 2).reshape(unfolded_full.shape[1], -1).numpy()
 
         n_pos = unfolded_full.shape[1]
         n_sample = min(args.max_positions, n_pos)
@@ -250,32 +365,80 @@ def fp32_forward(W_MK, activations_MK):
     return W_MK.T @ activations_MK
 
 
-def weight_scale_factor(W_MK, eps=1e-8):
-    """Per-OUTPUT-CHANNEL (per-K-column) max-abs scale, so the FP2-E1M0 grid
-    {-1,-.5,0,.5,1} actually gets used on every channel, not just whichever
-    channel happens to have the largest weights. A single per-tensor scale
-    is outlier-sensitive: trained conv layers routinely have a handful of
-    channels with much larger weights than the rest (common after training
-    -- some channels simply carry more signal), and a per-tensor max would
-    let those few channels set the scale for everyone else, quantizing
-    every other channel's weights to ~0. Per-channel scaling is also just
-    the correct design choice here: it mirrors the per-channel BN-fold
-    coefficient table already in residual_post_proc.sv -- each output
-    channel gets its own quantization scale, exactly like it'll get its
-    own BN scale/bias in hardware. Returns an array of shape [K]."""
-    return np.maximum(np.max(np.abs(W_MK), axis=0), eps)
+def quantize_shared_scale(scale, mode="e8m0", eps=1e-8):
+    """Quantize the per-block shared scale to 8 bits, matching
+    qat_finetune_fp2.quantize_scale exactly.
+
+    The paper's scale is an "8-bit shared scale", not an FP32 one. Leaving it
+    in FP32 (mode="none") makes every metric here optimistic: an FP32 scale
+    sits exactly at the block max, whereas E8M0 rounds the exponent UP, so
+    w/scale is systematically SMALLER and more weights fall below the 0.25
+    threshold that separates the 0 level from the +-0.5 level. Concretely
+    that moves ResNet-18 cell utilization by ~14 points (56% -> 42%), which
+    is the difference between the number this benchmark used to report and
+    the number qat_finetune_fp2.py reports for the same weights. Both were
+    "right" for their own assumption; only e8m0 is right for the paper's
+    hardware. Default here is "e8m0" for that reason -- pass
+    --scale-mode none to reproduce the older, FP32-scale numbers."""
+    if mode == "none":
+        return scale
+    exp = np.clip(np.ceil(np.log2(np.maximum(scale, eps))), -128.0, 127.0)
+    pow2 = np.power(2.0, exp)
+    if mode == "e8m0":
+        return pow2
+    if mode == "fp8":
+        mant = np.ceil((scale / pow2) * 128.0) / 128.0
+        return np.maximum(pow2 * mant, eps)
+    raise ValueError(f"unknown scale mode {mode!r}")
 
 
-def fp2_digital_forward(W_MK, activations_MK, scale):
+def weight_scale_factor(W_MK, block_size=32, eps=1e-8, scale_mode="e8m0"):
+    """Per-BLOCK max-abs scale, matching the FP2 paper's actual block
+    granularity (Dang et al., "FP2: A 2-bit Floating-Point Format for
+    Edge-AI Inference and Fine-Tuning", TCAS-I 2026): "32 original
+    floating-point numbers are grouped into a block, with each block
+    sharing an 8-bit shared scale X." Blocks are 32 CONSECUTIVE elements
+    along the reduction (M / input-channel) axis, for a FIXED output
+    channel -- i.e. exactly the (m0:m1, k) slices this benchmark's crossbar
+    tiling already visits, since block_size defaults to the same 32 as
+    TILE_M. This is coarser-than-per-element but much finer than the
+    previous per-whole-channel scale (which could span thousands of
+    elements and get dominated by a single outlier weight). Returns an
+    array of shape [n_blocks, K] using the SAME block boundaries as
+    tile_ranges(M, block_size), so callers can index it directly against
+    the M-tiling loop in analog_2t2r_forward.
+
+    NOTE ON PHYSICAL VALIDITY: block_size must equal (or be an exact
+    divisor consistent with) the M-tiling step used when actually running
+    the crossbar model. This benchmark rescales the crossbar's OUTPUT
+    current by `scale` after each single-tile golden_array_matmul() call
+    -- if a physical crossbar tile mixed rows from two different
+    quantization blocks with different scales, output-side rescaling
+    could no longer separate their contributions correctly. Keeping
+    block_size == tile_m (the default) sidesteps this entirely."""
+    M, K = W_MK.shape
+    m_ranges = tile_ranges(M, block_size)
+    scale = np.zeros((len(m_ranges), K))
+    for i, (m0, m1) in enumerate(m_ranges):
+        scale[i] = np.maximum(np.max(np.abs(W_MK[m0:m1, :]), axis=0), eps)
+    return quantize_shared_scale(scale, scale_mode, eps)
+
+
+def fp2_digital_forward(W_MK, activations_MK, scale, block_size=32):
     """FP2-E1M0 quantized weights, exact (noiseless) dot product -- isolates
-    pure quantization error from crossbar circuit error. `scale` is a
-    per-output-channel array [K] (see weight_scale_factor()) that rescales
-    each column of W_MK into the quantizer's dynamic range before
-    quantizing; the result is rescaled back per-channel so units match the
-    FP32 reference."""
-    scale = np.asarray(scale)
-    Wq = np.vectorize(cb.quantize_to_fp2)(W_MK / scale[None, :])
-    return (Wq.T @ activations_MK) * scale[:, None], Wq
+    pure quantization error from crossbar circuit error. `scale` is the
+    per-block array [n_blocks, K] from weight_scale_factor(); each block's
+    contribution is quantized and rescaled independently, then summed --
+    NOT a single global rescale, since different blocks can have very
+    different scales (that's the whole point of block floating point)."""
+    M, K = W_MK.shape
+    m_ranges = tile_ranges(M, block_size)
+    Wq = np.zeros_like(W_MK)
+    out = np.zeros((K, activations_MK.shape[1]))
+    for i, (m0, m1) in enumerate(m_ranges):
+        Wq[m0:m1, :] = np.vectorize(cb.quantize_to_fp2)(W_MK[m0:m1, :] / scale[i][None, :])
+        out += (Wq[m0:m1, :].T @ activations_MK[m0:m1, :]) * scale[i][:, None]
+    return out, Wq
 
 
 def analog_2t2r_forward(W_MK, activations_MK, tile_m, tile_k, r_sense, vread, scale, n_seeds_noise=1):
@@ -284,26 +447,34 @@ def analog_2t2r_forward(W_MK, activations_MK, tile_m, tile_k, r_sense, vread, sc
     tile_k), with results recovered into the same units as the digital dot
     product (matching crossbar_cli.py's recovery scaling) and summed across
     M-tiles (spatial reduction) / concatenated across K-tiles (output
-    channel tiling). `scale` is the per-output-channel array [K] from
-    weight_scale_factor(), applied per K-tile slice below. Returns
+    channel tiling). `scale` is the per-block array [n_blocks, K] from
+    weight_scale_factor() -- REQUIRES tile_m == the block_size used to
+    compute `scale`, since each M-tile here is treated as exactly one
+    quantization block (see weight_scale_factor's docstring). Returns
     (result[K,num_positions], cell_utilization)."""
     M, K = W_MK.shape
     num_pos = activations_MK.shape[1]
     g_lrs = 1.0 / cb.col.R_FOR_MAGNITUDE[1.0]
     scale = np.asarray(scale)
 
-    Wq = np.vectorize(cb.quantize_to_fp2)(W_MK / scale[None, :])
-    result = np.zeros((K, num_pos), dtype=np.float64)
-
     m_ranges = tile_ranges(M, tile_m)
     k_ranges = tile_ranges(K, tile_k)
+    assert scale.shape[0] == len(m_ranges), (
+        f"scale has {scale.shape[0]} blocks but tiling produces {len(m_ranges)} "
+        f"M-tiles -- weight_scale_factor's block_size must match tile_m."
+    )
 
+    Wq = np.zeros_like(W_MK)
+    for i, (m0, m1) in enumerate(m_ranges):
+        Wq[m0:m1, :] = np.vectorize(cb.quantize_to_fp2)(W_MK[m0:m1, :] / scale[i][None, :])
+
+    result = np.zeros((K, num_pos), dtype=np.float64)
     total_cells = 0
     active_cells = 0
 
     for (k0, k1) in k_ranges:
-        scale_tile = scale[k0:k1]
-        for (m0, m1) in m_ranges:
+        for i, (m0, m1) in enumerate(m_ranges):
+            scale_tile = scale[i, k0:k1]
             W_tile = Wq[m0:m1, k0:k1]
             total_cells += 2 * W_tile.shape[0] * W_tile.shape[1]  # 2T2R = 2 cells/synapse
             active_cells += int(np.count_nonzero(W_tile)) * 2
@@ -408,16 +579,19 @@ def validate_against_ngspice(layers, args, rng):
         if M == 0 or K == 0 or acts.shape[1] == 0:
             continue
 
-        scale = weight_scale_factor(W_MK)
-        Wq = np.vectorize(cb.quantize_to_fp2)(W_MK / scale[None, :])
+        scale = weight_scale_factor(W_MK, block_size=args.tile_m, scale_mode=args.scale_mode)
+        m_ranges = tile_ranges(M, args.tile_m)
+        k_ranges = tile_ranges(K, args.tile_k)
 
-        tile_m, tile_k = min(args.tile_m, M), min(args.tile_k, K)
-        m0 = int(rng.integers(0, max(1, M - tile_m + 1)))
-        k0 = int(rng.integers(0, max(1, K - tile_k + 1)))
-        m1, k1 = min(m0 + tile_m, M), min(k0 + tile_k, K)
+        block_idx = int(rng.integers(0, len(m_ranges)))
+        k_idx = int(rng.integers(0, len(k_ranges)))
+        m0, m1 = m_ranges[block_idx]
+        k0, k1 = k_ranges[k_idx]
         p = int(rng.integers(0, acts.shape[1]))
 
-        W_tile = Wq[m0:m1, k0:k1].tolist()
+        Wq_tile = np.vectorize(cb.quantize_to_fp2)(
+            W_MK[m0:m1, k0:k1] / scale[block_idx, k0:k1][None, :])
+        W_tile = Wq_tile.tolist()
         act_tile = acts[m0:m1, p].tolist()
 
         nodal = cb.golden_array_matmul(W_tile, act_tile, args.r_sense, args.vread)
@@ -462,7 +636,7 @@ def _load_imagenet_wnid_to_idx():
     """WNID -> standard ImageNet-1000 class index. Hardcodes the 10
     Imagenette WNIDs (sufficient for --eval-dir with the Imagenette
     download) plus an optional full-1000 override via IMAGENET_WNID_JSON
-    env var (path to a {wnid: idx} JSON) if you have the full mapping and
+    env var (path to a {wnid: idx} JSON) when the full mapping is available and
     want to eval against a bigger local ImageNet-format validation set."""
     import os
     full_map_path = os.environ.get("IMAGENET_WNID_JSON")
@@ -499,10 +673,10 @@ def evaluate_top1(model, args, quantize_weights_fn):
     1000-way ImageNet output head uses. Comparing argmax(logits) directly
     against ImageFolder's labels silently gives meaningless accuracy unless
     the folder names are the standard ImageNet WNIDs (n01440764, etc.) --
-    in which case we remap them to the correct 0-999 index below. If your
+    in which case they are remapped to the correct 0-999 index below. If the
     eval-dir's class folders are NOT real ImageNet WNIDs (e.g. a custom
     dataset), this remap will fail loudly rather than silently give wrong
-    numbers -- you'd need a full fine-tuned/retrained head for that case,
+    numbers -- that case needs a full fine-tuned/retrained head,
     which is outside the scope of this quantization-effect benchmark."""
     if not args.eval_dir:
         return None
@@ -553,9 +727,20 @@ def evaluate_top1(model, args, quantize_weights_fn):
         for mod in qmodel.modules():
             if isinstance(mod, nn.Conv2d):
                 w = mod.weight.data.numpy()
-                per_channel_scale = np.abs(w).reshape(w.shape[0], -1).max(axis=1)
-                per_channel_scale = np.maximum(per_channel_scale, 1e-8).reshape(-1, 1, 1, 1)
-                wq = np.vectorize(cb.quantize_to_fp2)(w / per_channel_scale) * per_channel_scale
+                orig_shape = w.shape
+                # [Cout, Cin*Kh*Kw] -- block along axis=1 (the M/reduction
+                # dimension) in chunks of 32, matching the paper's block
+                # spec and the main per-layer benchmark's block_size.
+                w_flat = w.reshape(orig_shape[0], -1)
+                wq_flat = np.zeros_like(w_flat)
+                block = 32
+                for m0 in range(0, w_flat.shape[1], block):
+                    m1 = min(m0 + block, w_flat.shape[1])
+                    blk_scale = np.maximum(np.abs(w_flat[:, m0:m1]).max(axis=1, keepdims=True), 1e-8)
+                    blk_scale = quantize_shared_scale(blk_scale, args.scale_mode)
+                    wq_flat[:, m0:m1] = np.vectorize(cb.quantize_to_fp2)(
+                        w_flat[:, m0:m1] / blk_scale) * blk_scale
+                wq = wq_flat.reshape(orig_shape)
                 mod.weight.data = torch.from_numpy(wq.astype(np.float32))
     top1_quant = run(qmodel)
 
@@ -569,6 +754,36 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--checkpoint", default=None, help="Local .pth ResNet-18 state_dict (no internet fetch of pretrained weights)")
     ap.add_argument("--synthetic", action="store_true", help="Skip torch entirely; use a small synthetic layer stack")
+    ap.add_argument("--cifar-arch", action="store_true",
+                    help="Build the CIFAR ResNet-18 stem (3x3 s1 conv, no maxpool) and use 32x32 "
+                         "calibration inputs. Required for checkpoints from qat_finetune_fp2.py "
+                         "trained on CIFAR-10/100.")
+    ap.add_argument("--calib-dataset", default="random",
+                    choices=["random", "cifar10", "cifar100", "imagefolder"],
+                    help="Source of the calibration images whose activations the SNR/RelErr "
+                         "numbers are measured against. 'random' is Gaussian NOISE and is only "
+                         "kept for reproducing older runs -- it warns. Use cifar10 with "
+                         "--calib-dir for any reported number.")
+    ap.add_argument("--calib-dir", default="./data",
+                    help="Directory holding the calibration dataset (for cifar10/cifar100, the "
+                         "dir containing cifar-10-batches-py/; for imagefolder, the image root).")
+    ap.add_argument("--calib-images", type=int, default=16,
+                    help="Number of calibration images. Sliding-window positions are pooled "
+                         "across all of them before --max-positions sampling.")
+    ap.add_argument("--skip-first-last", action="store_true",
+                    help="Exclude the first conv from the table. The paper (and "
+                         "qat_finetune_fp2.py by default) keeps the first and last layers at "
+                         "full precision, so in the deployed model conv1 is NEVER mapped onto "
+                         "the crossbar -- benchmarking it reports an error contribution the "
+                         "hardware does not actually incur, and it is a persistent outlier "
+                         "(M=27 gives it 1 partial block and the worst SNR in the table). The "
+                         "last layer is an nn.Linear and is already absent here.")
+    ap.add_argument("--scale-mode", default="e8m0", choices=["e8m0", "fp8", "none"],
+                    help="Precision of the per-block shared scale. e8m0 (default) is the "
+                         "paper's 8-bit hardware scale and matches qat_finetune_fp2.py; "
+                         "none keeps it in FP32, which is optimistic (see quantize_shared_scale).")
+    ap.add_argument("--num-classes", type=int, default=1000,
+                    help="Classifier width; must match the checkpoint (10 for CIFAR-10).")
     ap.add_argument("--tile-m", type=int, default=TILE_M_DEFAULT)
     ap.add_argument("--tile-k", type=int, default=TILE_K_DEFAULT)
     ap.add_argument("--r-sense", type=float, default=20.0)
@@ -592,6 +807,12 @@ def main():
     model, is_synthetic = build_model(args)
     layers = extract_conv_layers(model, args)
 
+    if args.skip_first_last and layers:
+        dropped = layers[0].name
+        layers = layers[1:]
+        print(f"--skip-first-last: excluding '{dropped}' (kept full-precision in the "
+              f"deployed model, so it is not on the crossbar).", file=sys.stderr)
+
     rtl_data = parse_rtl_log(args.rtl_log) if args.rtl_log else {}
 
     print(f"{'Layer':<28} {'SNR_dig(dB)':>11} {'SNR_analog(dB)':>15} "
@@ -605,8 +826,8 @@ def main():
 
         ref = fp32_forward(W_MK, acts)
 
-        w_scale = weight_scale_factor(W_MK)
-        dig, Wq = fp2_digital_forward(W_MK, acts, scale=w_scale)
+        w_scale = weight_scale_factor(W_MK, block_size=args.tile_m, scale_mode=args.scale_mode)
+        dig, Wq = fp2_digital_forward(W_MK, acts, scale=w_scale, block_size=args.tile_m)
         analog, cell_util = analog_2t2r_forward(W_MK, acts, args.tile_m, args.tile_k,
                                                   args.r_sense, args.vread, scale=w_scale)
 

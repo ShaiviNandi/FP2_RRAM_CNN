@@ -248,14 +248,14 @@ def main():
             for w, v, r, ratio, cls in sorted(intermediate, key=lambda x: abs(x[2] - (r_lrs_ref + args.r_hrs_threshold) / 2)):
                 print(f"    width={w}ns, amplitude={v}V  ->  R={r:.1f} ohm ({ratio:.2f}x LRS reference)")
             print()
-            print("Once you pick a candidate above, update WIDTH_FOR_MAGNITUDE and")
+            print("After selecting a candidate above, update WIDTH_FOR_MAGNITUDE and")
             print("R_FOR_MAGNITUDE in column_mac_test.py (the 0.5 entries) to these new")
             print("values -- the old 143ns/1095.6ohm entries were calibrated WITHOUT the")
             print("switch and are now confirmed invalid for that circuit.")
         else:
             print("No sweep points landed in the 'intermediate' band with the current")
             print(f"--r-hrs-threshold ({args.r_hrs_threshold} ohm). Given how sharp the")
-            print("cliff was in the bare-resistor sweep, you may need a finer width step")
+            print("cliff was in the bare-resistor sweep, a finer width step may be needed")
             print("(e.g. 1ns increments between 100-140ns) to find a new stable landing")
             print("point with Ron now in the loop -- the cliff itself likely shifted to")
             print("an earlier width, not just changed height.")

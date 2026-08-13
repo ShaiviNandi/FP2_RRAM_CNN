@@ -1,0 +1,35 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# datasets and checkpoints -- large, and regenerable
+data/
+*.pth
+*.pt
+*.ckpt
+
+# run artefacts
+logs/
+sim/
+sim_export/
+vendor/
+*.jsonl
+*.vcd
+*.raw
+*.out
+
+# generated results and figures; regenerate with make_figures.py
+paper/figures/
+*.csv
+!results_cifar_qat_deployed.csv
+
+# LaTeX build products
+*.aux
+*.log
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.out

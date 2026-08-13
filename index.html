@@ -3,10 +3,20 @@
 <head>
 <meta charset="UTF-8" />
 <title>ReRAM Crossbar Visualizer (local)</title>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
+<!--
+  Loaded via the local server's /vendor/ route, which caches these on first
+  run and falls back to redirecting to the CDN. Pointing straight at unpkg
+  means a blank page whenever the CDN is blocked, slow, or offline -- and a
+  blank page with no error is exactly what you get, because a failed <script
+  src> is silent. The bootstrap block further down turns that silence into a
+  readable message.
+  If you open this file directly via file:// instead of through server.py,
+  /vendor/ cannot resolve; the bootstrap will tell you so and how to fix it.
+-->
+<script src="/vendor/react.js" onerror="window.__cdnFail=(window.__cdnFail||[]).concat('react')"></script>
+<script src="/vendor/react-dom.js" onerror="window.__cdnFail=(window.__cdnFail||[]).concat('react-dom')"></script>
+<script src="/vendor/babel.js" onerror="window.__cdnFail=(window.__cdnFail||[]).concat('babel')"></script>
+<script src="/vendor/tailwind.js" onerror="window.__cdnFail=(window.__cdnFail||[]).concat('tailwind')"></script>
 <style>
   body { margin: 0; }
   input[type="range"] { accent-color: #ffb454; }
@@ -14,6 +24,54 @@
 </head>
 <body>
 <div id="root"></div>
+<script>
+/* ---------------------------------------------------------------------
+   BOOTSTRAP DIAGNOSTIC
+   A React page whose dependencies failed to load renders as a completely
+   blank white document with nothing in the console except a network error
+   you have to go looking for. This turns every failure mode -- missing
+   dependency, JSX compile error, runtime exception -- into a visible panel
+   that says which one happened and what to do about it.
+--------------------------------------------------------------------- */
+(function () {
+  var CSS = "background:#0a0e14;color:#e6edf3;font:13px/1.6 ui-sans-serif,system-ui,sans-serif;padding:28px;min-height:100vh;box-sizing:border-box";
+  function panel(title, body, hint) {
+    document.getElementById("root").setAttribute("style", CSS);
+    document.getElementById("root").innerHTML =
+      '<div style="max-width:760px">' +
+      '<div style="color:#ff6b6b;font-size:15px;font-weight:600;margin-bottom:10px">' + title + "</div>" +
+      '<pre style="background:#121821;border:1px solid #232b36;border-radius:8px;padding:14px;overflow:auto;white-space:pre-wrap;font:12px ui-monospace,Menlo,monospace;color:#e6edf3">' +
+      body + "</pre>" +
+      (hint ? '<div style="color:#7d8590;margin-top:12px">' + hint + "</div>" : "") +
+      "</div>";
+  }
+  window.__panel = panel;
+
+  window.addEventListener("error", function (e) {
+    var root = document.getElementById("root");
+    if (root && root.children.length && !root.__diag) return;   // app already rendered
+    panel("JavaScript error — the dashboard could not start",
+      (e.message || "unknown error") + "\n\n" + (e.filename || "") + ":" + (e.lineno || "?"),
+      "If this mentions a component name, it is a bug in the dashboard code. Copy the message.");
+  });
+
+  window.addEventListener("DOMContentLoaded", function () {
+    var missing = [];
+    if (typeof React === "undefined") missing.push("React");
+    if (typeof ReactDOM === "undefined") missing.push("ReactDOM");
+    if (typeof Babel === "undefined") missing.push("Babel");
+    if (!missing.length) return;
+    var viaFile = location.protocol === "file:";
+    document.getElementById("root").__diag = 1;
+    panel("Dependencies did not load: " + missing.join(", "),
+      "failed: " + ((window.__cdnFail || []).join(", ") || "(no onerror fired — likely blocked before the request)") +
+      "\nprotocol: " + location.protocol + "\norigin: " + location.origin,
+      viaFile
+        ? "You opened this file directly. The <code>/vendor/</code> paths only resolve through the server — run <code>python3 server.py --port 5057</code> and open <code>http://localhost:5057</code>."
+        : "The server's /vendor/ route could not supply these. It caches them into ./vendor/ on first request and otherwise redirects to unpkg.com, so this usually means the machine running server.py has no internet. Fix: <code>python3 server.py --fetch-vendor</code> once while online, or download react.production.min.js, react-dom.production.min.js and babel.min.js into a <code>vendor/</code> directory next to server.py.");
+  });
+})();
+</script>
 <script type="text/babel" data-presets="react">
 const { useState, useCallback, useRef, useEffect } = React;
 
@@ -763,7 +821,596 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+/* =====================================================================
+   ACCELERATOR DASHBOARD
+   Everything the benchmarking / QAT / ngspice / hw-model pipeline
+   produces, in one place. The Crossbar Explorer tab above is about ONE
+   tile; this tab is about the whole ResNet-18 mapping.
+===================================================================== */
+const { useMemo } = React;
+
+async function apiGet(base, path) {
+  const r = await fetch(base + path);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+  return r.json();
+}
+
+const fmt = (v, d = 2) =>
+  v === null || v === undefined || Number.isNaN(v) ? "—" :
+  (typeof v === "number" ? (Math.abs(v) < 1e-3 && v !== 0 ? v.toExponential(2) : v.toFixed(d)) : v);
+
+function Card({ title, subtitle, right, children, pad = 14 }) {
+  return (
+    <div style={{ background: COL.panel, border: `1px solid ${COL.border}`, borderRadius: 10, padding: pad, marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: subtitle ? 2 : 10 }}>
+        <div style={{ fontFamily: SANS, fontSize: 13, fontWeight: 600, color: COL.text }}>{title}</div>
+        <div>{right}</div>
+      </div>
+      {subtitle && <div style={{ fontFamily: SANS, fontSize: 11, color: COL.dim, marginBottom: 10, lineHeight: 1.5 }}>{subtitle}</div>}
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children, w }) {
+  return (
+    <label style={{ display: "inline-flex", flexDirection: "column", gap: 3, marginRight: 10, marginBottom: 8, width: w }}>
+      <span style={{ fontFamily: SANS, fontSize: 10, color: COL.dim, textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputStyle = { background: COL.panel2, border: `1px solid ${COL.border}`, color: COL.text, borderRadius: 5, padding: "4px 7px", fontFamily: MONO, fontSize: 12 };
+
+function Num({ value, onChange, step = 1, w = 84 }) {
+  return <input type="number" step={step} value={value} onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))} style={{ ...inputStyle, width: w }} />;
+}
+function Sel({ value, onChange, options, w = 190 }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} style={{ ...inputStyle, width: w }}>
+      {options.map((o) => <option key={o.value ?? o} value={o.value ?? o}>{o.label ?? o}</option>)}
+    </select>
+  );
+}
+function Btn({ onClick, children, kind = "amber", disabled }) {
+  const c = { amber: COL.amber, cyan: COL.cyan, red: COL.red, dim: COL.dim }[kind];
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{ background: disabled ? COL.off : "transparent", border: `1px solid ${disabled ? COL.border : c}`, color: disabled ? COL.dim : c, borderRadius: 6, padding: "5px 12px", fontFamily: SANS, fontSize: 12, cursor: disabled ? "default" : "pointer", marginRight: 8 }}>
+      {children}
+    </button>
+  );
+}
+
+/* ---------- charts (inline SVG, no CDN) ---------- */
+function LineChart({ series, height = 210, xLog = false, xLabel = "", yLabel = "", xTickFmt = (v) => v, yTickFmt = (v) => fmt(v, 1) }) {
+  const W = 640, H = height, PAD = { l: 52, r: 14, t: 12, b: 34 };
+  const pts = series.flatMap((s) => s.points);
+  if (!pts.length) return <div style={{ color: COL.dim, fontFamily: SANS, fontSize: 12 }}>No data</div>;
+  const tx = (v) => (xLog ? Math.log10(Math.max(v, 1e-12)) : v);
+  const xs = pts.map((p) => tx(p.x)), ys = pts.map((p) => p.y).filter((v) => v !== null && !Number.isNaN(v));
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  let y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const padY = (y1 - y0) * 0.12 || 1; y0 -= padY; y1 += padY;
+  const X = (v) => PAD.l + ((tx(v) - x0) / (x1 - x0 || 1)) * (W - PAD.l - PAD.r);
+  const Y = (v) => H - PAD.b - ((v - y0) / (y1 - y0 || 1)) * (H - PAD.t - PAD.b);
+  const yTicks = Array.from({ length: 5 }, (_, i) => y0 + ((y1 - y0) * i) / 4);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+      {yTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={PAD.l} x2={W - PAD.r} y1={Y(t)} y2={Y(t)} stroke={COL.border} strokeWidth="1" />
+          <text x={PAD.l - 6} y={Y(t) + 3} textAnchor="end" fill={COL.dim} fontSize="9" fontFamily={MONO}>{yTickFmt(t)}</text>
+        </g>
+      ))}
+      {series[0].points.map((p, i) => (
+        <text key={i} x={X(p.x)} y={H - PAD.b + 14} textAnchor="middle" fill={COL.dim} fontSize="9" fontFamily={MONO}>{xTickFmt(p.x)}</text>
+      ))}
+      <text x={W / 2} y={H - 3} textAnchor="middle" fill={COL.dim} fontSize="10" fontFamily={SANS}>{xLabel}</text>
+      <text x={11} y={H / 2} textAnchor="middle" fill={COL.dim} fontSize="10" fontFamily={SANS} transform={`rotate(-90 11 ${H / 2})`}>{yLabel}</text>
+      {series.map((s, si) => (
+        <g key={si}>
+          {s.band && (
+            <path fill={s.color} opacity="0.13" d={
+              s.points.map((p, i) => `${i ? "L" : "M"}${X(p.x)},${Y(p.lo)}`).join(" ") + " " +
+              s.points.slice().reverse().map((p) => `L${X(p.x)},${Y(p.hi)}`).join(" ") + " Z"} />
+          )}
+          <path fill="none" stroke={s.color} strokeWidth="2"
+            d={s.points.filter((p) => p.y !== null).map((p, i) => `${i ? "L" : "M"}${X(p.x)},${Y(p.y)}`).join(" ")} />
+          {s.points.filter((p) => p.y !== null).map((p, i) => <circle key={i} cx={X(p.x)} cy={Y(p.y)} r="2.6" fill={s.color} />)}
+        </g>
+      ))}
+      <g transform={`translate(${PAD.l + 6},${PAD.t + 4})`}>
+        {series.map((s, i) => (
+          <g key={i} transform={`translate(0,${i * 13})`}>
+            <rect width="9" height="2.5" y="4" fill={s.color} />
+            <text x="14" y="8" fill={COL.dim} fontSize="10" fontFamily={SANS}>{s.name}</text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+function GroupedBars({ rows, labelKey, keys, colors, height = 240, yLabel = "" }) {
+  const W = 900, H = height, PAD = { l: 46, r: 10, t: 12, b: 76 };
+  if (!rows.length) return <div style={{ color: COL.dim, fontFamily: SANS, fontSize: 12 }}>No data</div>;
+  const vals = rows.flatMap((r) => keys.map((k) => r[k])).filter((v) => v !== null && !Number.isNaN(v));
+  const y1 = Math.max(...vals, 0), y0 = Math.min(...vals, 0);
+  const Y = (v) => H - PAD.b - ((v - y0) / (y1 - y0 || 1)) * (H - PAD.t - PAD.b);
+  const gw = (W - PAD.l - PAD.r) / rows.length, bw = Math.max((gw - 6) / keys.length, 1.5);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+      {Array.from({ length: 5 }, (_, i) => y0 + ((y1 - y0) * i) / 4).map((t, i) => (
+        <g key={i}>
+          <line x1={PAD.l} x2={W - PAD.r} y1={Y(t)} y2={Y(t)} stroke={COL.border} />
+          <text x={PAD.l - 5} y={Y(t) + 3} textAnchor="end" fill={COL.dim} fontSize="9" fontFamily={MONO}>{fmt(t, 1)}</text>
+        </g>
+      ))}
+      {rows.map((r, ri) => (
+        <g key={ri}>
+          {keys.map((k, ki) => r[k] === null || Number.isNaN(r[k]) ? null : (
+            <rect key={ki} x={PAD.l + ri * gw + 3 + ki * bw} width={bw - 1}
+              y={Math.min(Y(r[k]), Y(0))} height={Math.max(Math.abs(Y(r[k]) - Y(0)), 0.5)} fill={colors[ki]} opacity="0.88">
+              <title>{`${r[labelKey]}  ${k} = ${fmt(r[k], 3)}`}</title>
+            </rect>
+          ))}
+          <text x={PAD.l + ri * gw + gw / 2} y={H - PAD.b + 6} fill={COL.dim} fontSize="8.5" fontFamily={MONO}
+            textAnchor="end" transform={`rotate(-52 ${PAD.l + ri * gw + gw / 2} ${H - PAD.b + 6})`}>
+            {String(r[labelKey]).replace("layer", "L").replace("downsample.0", "ds")}
+          </text>
+        </g>
+      ))}
+      <text x={11} y={H / 2} textAnchor="middle" fill={COL.dim} fontSize="10" fontFamily={SANS} transform={`rotate(-90 11 ${H / 2})`}>{yLabel}</text>
+      <g transform={`translate(${PAD.l + 8},${PAD.t})`}>
+        {keys.map((k, i) => (
+          <g key={i} transform={`translate(${i * 132},0)`}>
+            <rect width="9" height="9" fill={colors[i]} />
+            <text x="13" y="8.5" fill={COL.dim} fontSize="10" fontFamily={SANS}>{k}</text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+function Table({ rows, columns, maxH = 320 }) {
+  if (!rows.length) return <div style={{ color: COL.dim, fontFamily: SANS, fontSize: 12 }}>No rows</div>;
+  const cols = columns || Object.keys(rows[0]);
+  return (
+    <div style={{ maxHeight: maxH, overflow: "auto", border: `1px solid ${COL.border}`, borderRadius: 6 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: MONO, fontSize: 11 }}>
+        <thead style={{ position: "sticky", top: 0, background: COL.panel2 }}>
+          <tr>{cols.map((c) => (
+            <th key={c} style={{ textAlign: typeof rows[0][c] === "number" ? "right" : "left", padding: "6px 8px", color: COL.dim, fontWeight: 500, whiteSpace: "nowrap", borderBottom: `1px solid ${COL.border}` }}>{c}</th>
+          ))}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} style={{ borderTop: `1px solid ${COL.border}` }}>
+              {cols.map((c) => (
+                <td key={c} style={{ padding: "4px 8px", textAlign: typeof r[c] === "number" ? "right" : "left", color: r.__hl && r.__hl[c] ? r.__hl[c] : COL.text, whiteSpace: "nowrap" }}>
+                  {typeof r[c] === "number" ? fmt(r[c], 3) : (r[c] ?? "—")}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ---------- panels ---------- */
+function EnvStrip({ base }) {
+  const [env, setEnv] = useState(null), [err, setErr] = useState(null);
+  useEffect(() => { apiGet(base, "/api/env").then(setEnv).catch((e) => setErr(e.message)); }, [base]);
+  if (err) return <div style={{ color: COL.red, fontFamily: SANS, fontSize: 12, marginBottom: 12 }}>Backend unreachable at {base} — start it with <code>python3 server.py</code>. ({err})</div>;
+  if (!env) return null;
+  const chip = (ok, label) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginRight: 14, fontFamily: SANS, fontSize: 11, color: COL.dim }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: ok ? COL.green : COL.red }} />{label}
+    </span>
+  );
+  return (
+    <div style={{ background: COL.panel, border: `1px solid ${COL.border}`, borderRadius: 8, padding: "9px 13px", marginBottom: 14, display: "flex", flexWrap: "wrap", alignItems: "center" }}>
+      {chip(env.ngspice.found, `ngspice ${env.ngspice.found ? env.ngspice.path : "missing"}`)}
+      {chip(env.torch, "torch")}
+      {chip(env.cuda, env.gpu || "no CUDA")}
+      {chip(env.hw_model, "hw_model")}
+      <span style={{ fontFamily: MONO, fontSize: 10.5, color: COL.dim, marginLeft: "auto" }}>
+        R_LRS {fmt(env.device_params.r_lrs, 1)}Ω · R_HRS {fmt(env.device_params.r_hrs, 0)}Ω · on/off {fmt(env.device_params.on_off_ratio, 0)}× · {env.cpu_count} cores
+      </span>
+    </div>
+  );
+}
+
+function ResultsPanel({ base, artifacts }) {
+  const csvs = artifacts.filter((a) => (a.columns || []).includes("snr_analog_db")).map((a) => a.name);
+  const [a, setA] = useState(""), [b, setB] = useState("");
+  const [rowsA, setRowsA] = useState([]), [rowsB, setRowsB] = useState([]);
+  useEffect(() => { if (!a && csvs.length) setA(csvs[csvs.length - 1]); }, [csvs.join()]);
+  useEffect(() => { if (a) apiGet(base, `/api/csv/${a}`).then((d) => setRowsA(d.rows)).catch(() => setRowsA([])); }, [a, base]);
+  useEffect(() => { if (b) apiGet(base, `/api/csv/${b}`).then((d) => setRowsB(d.rows)).catch(() => setRowsB([])); else setRowsB([]); }, [b, base]);
+
+  const gapStats = useMemo(() => {
+    if (!rowsA.length) return null;
+    const g = rowsA.map((r) => r.snr_digital_db - r.snr_analog_db);
+    const mean = g.reduce((s, v) => s + v, 0) / g.length;
+    const worse = g.filter((v) => v > 0).length;
+    const dig = rowsA.map((r) => r.snr_digital_db), ana = rowsA.map((r) => r.snr_analog_db);
+    const spread = (v) => Math.max(...v) - Math.min(...v);
+    return { mean, worse, n: g.length, digSpread: spread(dig), anaSpread: spread(ana),
+             slope: spread(ana) / (spread(dig) || 1), anaMax: Math.max(...ana) };
+  }, [rowsA]);
+
+  const delta = useMemo(() => {
+    if (!rowsA.length || !rowsB.length) return null;
+    const mapB = Object.fromEntries(rowsB.map((r) => [r.layer, r]));
+    const keys = ["snr_digital_db", "snr_analog_db", "relerr_analog_pct", "cell_utilization_pct"];
+    const rows = rowsA.filter((r) => mapB[r.layer]).map((r) => {
+      const o = { layer: r.layer }; const hl = {};
+      keys.forEach((k) => { const d = mapB[r.layer][k] - r[k]; o["Δ " + k] = d; hl["Δ " + k] = d > 0 ? COL.green : d < 0 ? COL.red : COL.dim; });
+      o.__hl = hl; return o;
+    });
+    const summary = keys.map((k) => {
+      const d = rows.map((r) => r["Δ " + k]);
+      const mean = d.reduce((s, v) => s + v, 0) / d.length;
+      const sd = Math.sqrt(d.reduce((s, v) => s + (v - mean) ** 2, 0) / (d.length - 1 || 1));
+      return { metric: k, mean, sd, up: d.filter((v) => v > 0).length, down: d.filter((v) => v < 0).length,
+               verdict: Math.abs(mean) < sd / Math.sqrt(d.length) * 2 ? "indistinguishable from zero" : "real effect" };
+    });
+    return { rows, summary };
+  }, [rowsA, rowsB]);
+
+  return (
+    <>
+      <Card title="Per-layer fidelity"
+        subtitle="SNR of the FP2-quantized dot product (digital, noiseless) and of the same weights through the resistive-divider crossbar (analog), both measured against FP32."
+        right={<Sel value={a} onChange={setA} options={csvs} w={260} />}>
+        <GroupedBars rows={rowsA} labelKey="layer" keys={["snr_digital_db", "snr_analog_db"]}
+          colors={[COL.amber, COL.cyan]} yLabel="SNR (dB)" />
+        {gapStats && (
+          <div style={{ fontFamily: SANS, fontSize: 11.5, color: COL.dim, lineHeight: 1.65, marginTop: 8, borderTop: `1px solid ${COL.border}`, paddingTop: 9 }}>
+            Analog is worse than digital in <b style={{ color: COL.text }}>{gapStats.worse}/{gapStats.n}</b> layers,
+            mean gap <b style={{ color: COL.text }}>{fmt(gapStats.mean, 2)} dB</b>.
+            Digital spans {fmt(gapStats.digSpread, 2)} dB but analog only {fmt(gapStats.anaSpread, 2)} dB —
+            the crossbar returns about <b style={{ color: COL.amber }}>{fmt(gapStats.slope, 2)} dB of analog SNR per dB of digital SNR</b>,
+            asymptoting near {fmt(gapStats.anaMax, 1)} dB.
+            {gapStats.slope < 0.75 && " Quantization is no longer your bottleneck — the circuit is. Use the Sweep tab to attack R_sense and tile height."}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Compare two runs" subtitle="Pick a control and a treatment (e.g. pre-QAT vs post-QAT). A mean shift smaller than 2 standard errors is reported as indistinguishable from zero, because at this per-layer spread it is."
+        right={<Sel value={b} onChange={setB} options={[{ value: "", label: "— none —" }, ...csvs.map((c) => ({ value: c, label: c }))]} w={260} />}>
+        {!delta ? <div style={{ color: COL.dim, fontFamily: SANS, fontSize: 12 }}>Choose a second CSV to diff against <code>{a}</code>.</div> : (
+          <>
+            <Table rows={delta.summary.map((s) => ({ metric: s.metric, mean: s.mean, sd: s.sd, "up/down": `${s.up}/${s.down}`, verdict: s.verdict }))} maxH={170} />
+            <div style={{ height: 10 }} />
+            <Table rows={delta.rows} maxH={240} />
+          </>
+        )}
+      </Card>
+
+      <Card title="Raw table" right={<span style={{ fontFamily: MONO, fontSize: 10.5, color: COL.dim }}>{a}</span>}>
+        <Table rows={rowsA} maxH={340} />
+      </Card>
+    </>
+  );
+}
+
+function QatPanel({ base, artifacts }) {
+  const files = artifacts.filter((a) => (a.columns || []).includes("test_acc")).map((a) => a.name);
+  const [f, setF] = useState(""), [rows, setRows] = useState([]);
+  useEffect(() => { if (!f && files.length) setF(files[0]); }, [files.join()]);
+  useEffect(() => { if (f) apiGet(base, `/api/csv/${f}`).then((d) => setRows(d.rows)).catch(() => setRows([])); }, [f, base]);
+  if (!files.length) return <Card title="QAT history" subtitle="No qat_history.csv found. Run qat_finetune_fp2.py with --log-csv."><div /></Card>;
+  const flat = rows.length > 1 && Math.abs(rows[rows.length - 1].cell_utilization_pct - rows[0].cell_utilization_pct) < 1.0;
+  return (
+    <Card title="QAT fine-tuning history" right={<Sel value={f} onChange={setF} options={files} w={220} />}
+      subtitle="Test accuracy against the two quantization-health metrics. If accuracy climbs while utilization and residual stay flat, QAT is adapting the network around a fixed quantization noise floor rather than shrinking it — which means it will not improve your crossbar numbers.">
+      <LineChart height={230} xLabel="epoch" yLabel="%"
+        series={[
+          { name: "test accuracy %", color: COL.green, points: rows.map((r) => ({ x: r.epoch, y: r.test_acc })) },
+          { name: "cell utilization %", color: COL.amber, points: rows.map((r) => ({ x: r.epoch, y: r.cell_utilization_pct })) },
+          { name: "quant residual %", color: COL.cyan, points: rows.map((r) => ({ x: r.epoch, y: r.quant_residual_pct })) },
+        ]} />
+      {rows.length > 1 && (
+        <div style={{ fontFamily: SANS, fontSize: 11.5, color: COL.dim, lineHeight: 1.6, marginTop: 8, borderTop: `1px solid ${COL.border}`, paddingTop: 9 }}>
+          Accuracy {fmt(rows[0].test_acc, 2)}% → <b style={{ color: COL.text }}>{fmt(rows[rows.length - 1].test_acc, 2)}%</b>.
+          Utilization {fmt(rows[0].cell_utilization_pct, 1)}% → {fmt(rows[rows.length - 1].cell_utilization_pct, 1)}%,
+          residual {fmt(rows[0].quant_residual_pct, 1)}% → {fmt(rows[rows.length - 1].quant_residual_pct, 1)}%.
+          {flat && <b style={{ color: COL.amber }}> The quantization metrics are flat — expect no crossbar-level improvement from this run.</b>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function SweepPanel({ base }) {
+  const [v, setV] = useState("r_sense");
+  const [M, setM] = useState(32), [K, setK] = useState(16);
+  const [rs, setRs] = useState(20), [util, setUtil] = useState(0.42), [seeds, setSeeds] = useState(3);
+  const [res, setRes] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState(null);
+  const run = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(base + "/api/sweep", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ variable: v, M, K, r_sense: rs, utilization: util, n_seeds: seeds }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setRes(d);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const best = res && res.points.reduce((a, p) => (p.snr_db > (a?.snr_db ?? -1e9) ? p : a), null);
+  return (
+    <Card title="Circuit sweep explorer"
+      subtitle="Where the crossbar's own error comes from. SYNTHETIC weights and activations — the shape of these curves is set by the resistive-divider physics and transfers, the absolute dB values do not. For real per-layer numbers launch benchmark_resnet18.py from Jobs.">
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Field label="sweep"><Sel value={v} onChange={setV} options={[
+          { value: "r_sense", label: "R_sense (bitline load)" },
+          { value: "M", label: "tile height M" },
+          { value: "utilization", label: "cell utilization" }]} w={210} /></Field>
+        <Field label="M"><Num value={M} onChange={setM} /></Field>
+        <Field label="K"><Num value={K} onChange={setK} /></Field>
+        <Field label="R_sense Ω"><Num value={rs} onChange={setRs} /></Field>
+        <Field label="utilization"><Num value={util} onChange={setUtil} step={0.01} /></Field>
+        <Field label="seeds"><Num value={seeds} onChange={setSeeds} w={60} /></Field>
+        <div style={{ marginBottom: 8 }}><Btn onClick={run} disabled={busy}>{busy ? "running…" : "Run sweep"}</Btn></div>
+      </div>
+      {err && <div style={{ color: COL.red, fontFamily: SANS, fontSize: 12 }}>{err}</div>}
+      {res && (
+        <>
+          <LineChart height={230} xLog={v === "r_sense" || v === "M"}
+            xLabel={{ r_sense: "R_sense (Ω, log)", M: "tile height M (log)", utilization: "cell utilization" }[res.variable]}
+            yLabel="analog SNR vs digital (dB)"
+            xTickFmt={(x) => (x >= 1 ? String(x) : x.toFixed(2))}
+            series={[{ name: "SNR (min–max over seeds)", color: COL.cyan, band: true,
+              points: res.points.map((p) => ({ x: p.value, y: p.snr_db, lo: p.snr_min, hi: p.snr_max })) }]} />
+          <div style={{ fontFamily: SANS, fontSize: 11.5, color: COL.dim, lineHeight: 1.6, marginTop: 8 }}>
+            Best point: <b style={{ color: COL.text }}>{res.variable} = {best.value}</b> at {fmt(best.snr_db, 2)} dB.
+            {res.variable === "r_sense" && " Lowering R_sense reduces bitline loading and raises SNR, but shrinks the sense voltage the ADC has to resolve — the ADC-input-referred noise this sweep does not model sets the real floor."}
+            {res.variable === "M" && " Shorter columns load less and read cleaner, but cost more ADC conversions per MAC. Cross-reference the Hardware tab's M sweep: these two curves move in opposite directions and their crossing is your tile size."}
+          </div>
+          <div style={{ height: 10 }} />
+          <Table rows={res.points.map((p) => ({ [res.variable]: p.value, snr_db: p.snr_db, snr_min: p.snr_min, snr_max: p.snr_max, rel_err_pct: p.rel_err_pct, cell_util_pct: p.cell_util_pct }))} maxH={200} />
+        </>
+      )}
+    </Card>
+  );
+}
+
+function HwPanel({ base, artifacts }) {
+  const csvs = artifacts.filter((a) => (a.columns || []).includes("cell_utilization_pct")).map((a) => a.name);
+  const pcsvs = artifacts.filter((a) => (a.columns || []).includes("power_mean_uw")).map((a) => a.name);
+  const [lc, setLc] = useState(""), [pc, setPc] = useState("");
+  const [tm, setTm] = useState(32), [tk, setTk] = useState(16), [adc, setAdc] = useState(8), [node, setNode] = useState(65);
+  const [phys, setPhys] = useState(0);
+  const [res, setRes] = useState(null), [sw, setSw] = useState(null), [err, setErr] = useState(null), [busy, setBusy] = useState(false);
+  useEffect(() => { if (!lc && csvs.length) setLc(csvs[csvs.length - 1]); }, [csvs.join()]);
+
+  const call = async (sweep) => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(base + "/api/hwmodel", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layers_csv: lc, power_csv: pc || null, tile_m: tm, tile_k: tk, sweep_m: sweep,
+          physical_tiles: phys, assumptions: { ADC_BITS: adc, TECH_F_NM: node } }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      if (sweep) setSw(d.sweep_m); else setRes(d);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const R = res && res.result, A = R && R.area;
+  return (
+    <>
+      <Card title="Area · power · delay"
+        subtitle="Array power is MEASURED by ngspice when you supply a power CSV; everything else is a closed-form model on literature-typical assumptions. Replace TECH_F_NM / CELL_AREA_F2 / the ADC constants in hw_model.py with PDK data before publishing any of this.">
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end" }}>
+          <Field label="layers csv"><Sel value={lc} onChange={setLc} options={csvs} w={250} /></Field>
+          <Field label="ngspice power csv"><Sel value={pc} onChange={setPc} options={[{ value: "", label: "— modelled —" }, ...pcsvs.map((c) => ({ value: c, label: c }))]} w={220} /></Field>
+          <Field label="tile M"><Num value={tm} onChange={setTm} /></Field>
+          <Field label="tile K"><Num value={tk} onChange={setTk} /></Field>
+          <Field label="ADC bits"><Num value={adc} onChange={setAdc} w={64} /></Field>
+          <Field label="node nm"><Num value={node} onChange={setNode} w={64} /></Field>
+          <Field label="phys tiles (0=all)"><Num value={phys} onChange={setPhys} w={90} /></Field>
+          <div style={{ marginBottom: 8 }}>
+            <Btn onClick={() => call(false)} disabled={busy || !lc}>Model</Btn>
+            <Btn kind="cyan" onClick={() => call(true)} disabled={busy || !lc}>Sweep M</Btn>
+          </div>
+        </div>
+        {err && <div style={{ color: COL.red, fontFamily: SANS, fontSize: 12 }}>{err}</div>}
+        {R && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10, marginBottom: 12 }}>
+              {[["total area", `${fmt(A.total_mm2, 3)} mm²`], ["energy / MAC", `${fmt(R.pj_per_mac, 4)} pJ`],
+                ["throughput", `${fmt(R.tops, 2)} TOPS`], ["efficiency", `${fmt(R.tops_per_w, 1)} TOPS/W`],
+                ["density", `${fmt(R.tops_per_mm2, 2)} TOPS/mm²`], ["tile read", `${fmt(res.delay.t_tile_ns, 3)} ns`],
+                ["tiles", R.total_tiles], ["ADC share of area", `${fmt(100 * A.adc_frac, 1)}%`]].map(([k, val]) => (
+                <div key={k} style={{ background: COL.panel2, border: `1px solid ${COL.border}`, borderRadius: 7, padding: "8px 10px" }}>
+                  <div style={{ fontFamily: SANS, fontSize: 10, color: COL.dim, textTransform: "uppercase", letterSpacing: 0.4 }}>{k}</div>
+                  <div style={{ fontFamily: MONO, fontSize: 15, color: COL.amber, marginTop: 2 }}>{val}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontFamily: SANS, fontSize: 11.5, color: COL.dim, lineHeight: 1.6, marginBottom: 10 }}>
+              {R.reuse_factor > 1
+                ? <span>{R.total_tiles} logical tiles time-multiplexed over <b style={{ color: COL.text }}>{R.physical_tiles}</b> physical tiles ({fmt(R.reuse_factor, 1)}× reuse). <b style={{ color: COL.red }}>Tile reprogramming energy between passes is NOT modelled and is likely dominant at this reuse factor.</b> </span>
+                : <span>Fully weight-stationary: {R.total_tiles} physical tiles, nothing reloaded. Set "physical tiles" above to time-multiplex. </span>}
+              Array power measured for <b style={{ color: res.power_measured_layers ? COL.green : COL.red }}>{res.power_measured_layers}/{res.total_layers}</b> layers.
+              Bitline settling is {fmt(100 * res.delay.settle_frac, 2)}% of tile time — the ADC's {fmt(res.delay.t_adc_ns, 2)} ns conversion dominates.
+              {A.adc_frac > 0.5 && <b style={{ color: COL.amber }}> The ADC, not the ReRAM array, is your area and energy budget. Raising tile M amortizes it.</b>}
+            </div>
+            <Table rows={R.per_layer.map((r) => ({ layer: r.layer, tiles: r.tiles, "t_tile(ns)": r.t_tile_ns,
+              "E(nJ)": r.energy_nj, "fJ/MAC": r.fj_per_mac, "ADC%E": 100 * r.adc_energy_frac,
+              "P_arr(µW)": r.array_power_uw, src: r.power_measured ? "SIM" : "MODEL" }))} maxH={300} />
+          </>
+        )}
+      </Card>
+      {sw && (
+        <Card title="Tile-height trade-off" subtitle="Energy per MAC falls with M because the ADC's fixed per-column cost amortizes over more rows. The circuit sweep on the previous tab moves the opposite way — taller columns load the bitline harder and lose SNR. Your tile size is where those cross.">
+          <LineChart height={220} xLog xLabel="tile height M (log)" yLabel="pJ / MAC"
+            series={[{ name: "energy per MAC (pJ)", color: COL.amber, points: sw.map((s) => ({ x: s.tile_m, y: s.pj_per_mac })) }]} />
+          <Table rows={sw.map((s) => ({ tile_m: s.tile_m, tiles: s.tiles, "t_tile(ns)": s.t_tile_ns, "pJ/MAC": s.pj_per_mac,
+            "ADC%E": 100 * s.adc_energy_frac, "area(mm²)": s.area_mm2, "TOPS/W": s.tops_per_w, "TOPS/mm²": s.tops_per_mm2 }))} maxH={240} />
+        </Card>
+      )}
+    </>
+  );
+}
+
+const JOB_PRESETS = [
+  { name: "Benchmark (crossbar fidelity)", script: "benchmark_resnet18.py",
+    args: ["--checkpoint", "resnet18_cifar10_fp2qat.pth", "--cifar-arch", "--num-classes", "10",
+           "--calib-dataset", "cifar10", "--calib-dir", "./data", "--skip-first-last",
+           "--max-positions", "32", "--out-csv", "results_gui.csv"] },
+  { name: "QAT fine-tune", script: "qat_finetune_fp2.py",
+    args: ["--dataset", "cifar10", "--data-dir", "./data", "--pretrain-epochs", "30", "--epochs", "10",
+           "--batch-size", "256", "--bf16", "--save-fp32-checkpoint", "resnet18_cifar10_fp32.pth",
+           "--out-checkpoint", "resnet18_cifar10_fp2qat.pth", "--log-csv", "qat_history.csv"] },
+  { name: "ngspice full sweep (dry run)", script: "ngspice_full_sweep.py",
+    args: ["--checkpoint", "resnet18_cifar10_fp2qat.pth", "--cifar-arch", "--num-classes", "10",
+           "--calib-dataset", "cifar10", "--calib-dir", "./data", "--skip-first-last",
+           "--max-positions", "32", "--dry-run"] },
+  { name: "ngspice full sweep (REAL, hours)", script: "ngspice_full_sweep.py",
+    args: ["--checkpoint", "resnet18_cifar10_fp2qat.pth", "--cifar-arch", "--num-classes", "10",
+           "--calib-dataset", "cifar10", "--calib-dir", "./data", "--skip-first-last",
+           "--max-positions", "32", "--out-jsonl", "ngspice_full.jsonl",
+           "--out-csv", "ngspice_full_summary.csv"] },
+  { name: "ngspice sweep self-test", script: "ngspice_full_sweep.py", args: ["--self-test"] },
+  { name: "hw_model self-test", script: "hw_model.py", args: ["--self-test"] },
+];
+
+function JobsPanel({ base, onArtifacts }) {
+  const [preset, setPreset] = useState(0);
+  const [args, setArgs] = useState(JOB_PRESETS[0].args.join(" "));
+  const [jobs, setJobs] = useState([]), [sel, setSel] = useState(null), [log, setLog] = useState([]), [err, setErr] = useState(null);
+  const logRef = useRef(null);
+
+  useEffect(() => { setArgs(JOB_PRESETS[preset].args.join(" ")); }, [preset]);
+  useEffect(() => {
+    const t = setInterval(() => { apiGet(base, "/api/jobs").then((d) => setJobs(d.jobs)).catch(() => {}); }, 1500);
+    return () => clearInterval(t);
+  }, [base]);
+  useEffect(() => {
+    if (!sel) return;
+    const t = setInterval(async () => {
+      try {
+        const d = await apiGet(base, `/api/jobs/${sel}`);
+        setLog(d.log);
+        if (d.status !== "running") { clearInterval(t); onArtifacts && onArtifacts(); }
+      } catch (e) { clearInterval(t); }
+    }, 1200);
+    return () => clearInterval(t);
+  }, [sel, base]);
+  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log]);
+
+  const launch = async () => {
+    setErr(null);
+    try {
+      const r = await fetch(base + "/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script: JOB_PRESETS[preset].script, args: args.split(/\s+/).filter(Boolean) }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setSel(d.id); setLog([]);
+    } catch (e) { setErr(e.message); }
+  };
+
+  return (
+    <Card title="Run jobs" subtitle="Launches the pipeline scripts in this directory as background processes and streams their output. Only the four project scripts can be launched, with character-restricted arguments — this is a local tool, not an authenticated one, so keep the server bound to 127.0.0.1.">
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Field label="preset"><Sel value={preset} onChange={(v) => setPreset(Number(v))}
+          options={JOB_PRESETS.map((p, i) => ({ value: i, label: p.name }))} w={280} /></Field>
+        <div style={{ marginBottom: 8 }}><Btn onClick={launch}>Launch</Btn></div>
+      </div>
+      <Field label={`arguments to ${JOB_PRESETS[preset].script}`} w="100%">
+        <textarea value={args} onChange={(e) => setArgs(e.target.value)} rows={3}
+          style={{ ...inputStyle, width: "100%", resize: "vertical", lineHeight: 1.5 }} />
+      </Field>
+      {err && <div style={{ color: COL.red, fontFamily: SANS, fontSize: 12, marginBottom: 8 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: "0 0 240px" }}>
+          <div style={{ fontFamily: SANS, fontSize: 10, color: COL.dim, textTransform: "uppercase", marginBottom: 5 }}>jobs</div>
+          <div style={{ maxHeight: 240, overflow: "auto", border: `1px solid ${COL.border}`, borderRadius: 6 }}>
+            {jobs.length === 0 && <div style={{ padding: 9, color: COL.dim, fontFamily: SANS, fontSize: 11.5 }}>none yet</div>}
+            {jobs.slice().reverse().map((j) => (
+              <div key={j.id} onClick={() => { setSel(j.id); setLog([]); }}
+                style={{ padding: "6px 9px", cursor: "pointer", borderBottom: `1px solid ${COL.border}`, background: sel === j.id ? COL.panel2 : "transparent" }}>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: COL.text }}>{j.script}</div>
+                <div style={{ fontFamily: SANS, fontSize: 10, color: j.status === "running" ? COL.amber : j.status === "done" ? COL.green : COL.red }}>
+                  {j.status}{j.returncode !== null ? ` (exit ${j.returncode})` : ""} · {j.lines} lines
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 320 }}>
+          <div style={{ fontFamily: SANS, fontSize: 10, color: COL.dim, textTransform: "uppercase", marginBottom: 5 }}>output</div>
+          <div ref={logRef} style={{ height: 240, overflow: "auto", background: COL.bg, border: `1px solid ${COL.border}`, borderRadius: 6, padding: 9, fontFamily: MONO, fontSize: 10.5, color: COL.text, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>
+            {log.length ? log.join("\n") : <span style={{ color: COL.dim }}>select or launch a job</span>}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function Dashboard({ base }) {
+  const [tab, setTab] = useState("results");
+  const [artifacts, setArtifacts] = useState([]);
+  const refresh = useCallback(() => {
+    apiGet(base, "/api/artifacts").then((d) => setArtifacts(d.csv)).catch(() => setArtifacts([]));
+  }, [base]);
+  useEffect(refresh, [refresh]);
+
+  const tabs = [["results", "Fidelity"], ["qat", "QAT"], ["sweep", "Circuit sweep"], ["hw", "Hardware"], ["jobs", "Jobs"]];
+  return (
+    <div style={{ padding: "0 18px 40px" }}>
+      <EnvStrip base={base} />
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        {tabs.map(([k, label]) => (
+          <button key={k} onClick={() => { setTab(k); refresh(); }}
+            style={{ background: tab === k ? COL.panel2 : "transparent", border: `1px solid ${tab === k ? COL.amber : COL.border}`,
+              color: tab === k ? COL.amber : COL.dim, borderRadius: 7, padding: "6px 14px", fontFamily: SANS, fontSize: 12, cursor: "pointer" }}>
+            {label}
+          </button>
+        ))}
+        <div style={{ marginLeft: "auto" }}><Btn kind="dim" onClick={refresh}>Refresh files</Btn></div>
+      </div>
+      {tab === "results" && <ResultsPanel base={base} artifacts={artifacts} />}
+      {tab === "qat" && <QatPanel base={base} artifacts={artifacts} />}
+      {tab === "sweep" && <SweepPanel base={base} />}
+      {tab === "hw" && <HwPanel base={base} artifacts={artifacts} />}
+      {tab === "jobs" && <JobsPanel base={base} onArtifacts={refresh} />}
+    </div>
+  );
+}
+
+function Shell() {
+  const [view, setView] = useState(() => localStorage.getItem("crossbar_view") || "explorer");
+  const [base] = useState(() => localStorage.getItem("crossbar_api_base") || "http://localhost:5057");
+  useEffect(() => { localStorage.setItem("crossbar_view", view); }, [view]);
+  return (
+    <div style={{ background: COL.bg, minHeight: "100vh" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px 0" }}>
+        {[["explorer", "Crossbar Explorer"], ["dashboard", "Accelerator Dashboard"]].map(([k, label]) => (
+          <button key={k} onClick={() => setView(k)}
+            style={{ background: view === k ? COL.amber : "transparent", border: `1px solid ${view === k ? COL.amber : COL.border}`,
+              color: view === k ? COL.bg : COL.dim, borderRadius: 8, padding: "7px 16px", fontFamily: SANS,
+              fontSize: 12.5, fontWeight: view === k ? 600 : 400, cursor: "pointer" }}>
+            {label}
+          </button>
+        ))}
+        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10.5, color: COL.dim }}>FP2-E1M0 · 2T2R ReRAM · ResNet-18</span>
+      </div>
+      {view === "explorer" ? <App /> : <Dashboard base={base} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Shell />);
 </script>
 </body>
 </html>

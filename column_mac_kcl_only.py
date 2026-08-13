@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-KCL summation validation using FIXED resistors at our already-calibrated
+KCL summation validation using FIXED resistors at the already-calibrated
 values, instead of re-simulating the dynamic program-then-read sequence.
 
 WHY THIS PIVOT: the previous version tried to validate two different things
@@ -10,12 +10,12 @@ intended resistance for each cell. (B) turned out to have real, still
 unresolved issues (a 1T1R select-switch that corrupts programming for
 reasons not yet diagnosed). Chasing (B) was blocking any progress on (A),
 which is what this step actually needs. This script isolates (A) cleanly:
-it uses plain SPICE resistors set to our validated calibration values
+it uses plain SPICE resistors set to the validated calibration values
 (542.8 / 1095.6 / 218587.1 ohm for weight magnitudes 1.0 / 0.5 / 0.0), and
-checks whether ngspice's linear solve matches our own Python nodal-analysis
+checks whether ngspice's linear solve matches the Python nodal-analysis
 golden model for the shared-bitline circuit. This is a much lower-risk
 check (ngspice solving a linear resistor network is about as
-well-established as SPICE gets), but it's still worth confirming our own
+well-established as SPICE gets), but it is still worth confirming the
 Python math agrees with an independent solver before trusting it further.
 
 (B) -- whether real sequential programming through a shared bitline
@@ -169,7 +169,7 @@ def main():
     v_bl_sim, currents_sim = row
     # NOTE: ngspice reports source current with the passive sign convention
     # (negative when the source is delivering power to the circuit) -- flip
-    # sign here to compare against our golden model's "physical current
+    # sign here to compare against the golden model's "physical current
     # into the cell" convention. This is the exact bug found this session
     # in the previous script's comparison logic.
     i_total_sim = -sum(currents_sim)
@@ -180,7 +180,7 @@ def main():
     print(f"Error vs circuit-exact golden model: {err_pct:.3f}%")
     if err_pct < 1.0:
         print("PASS: KCL summation across N cells matches the exact nodal-analysis")
-        print("golden model to within 1%. This confirms ngspice and our Python golden")
+        print("golden model to within 1%. This confirms ngspice and the Python golden")
         print("model agree on the shared-bitline circuit's physics.")
     else:
         print("WARNING: still a meaningful discrepancy -- worth checking per-cell values")

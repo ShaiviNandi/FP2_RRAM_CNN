@@ -1,327 +1,212 @@
-# FP2 ReRAM Crossbar Neural Network Accelerator
+# FP2 on a 2T2R ReRAM Crossbar
 
-A mixed-signal neural network accelerator design combining **2-bit floating-point (FP2-E1M0) encoding** with **ReRAM (resistive RAM) crossbar arrays** for efficient matrix multiplication in low-precision inference.
+Circuit-exact simulation of a 2-bit block-floating-point (FP2-E1M0) CNN
+accelerator built on a 2T2R resistive-RAM crossbar, with per-column
+loading-gain calibration.
 
-## Overview
-
-This project implements a complete design-space exploration and verification flow for a MAC (multiply-accumulate) unit based on analog crossbar computation using ReRAM devices. The key innovation is using ReRAM's two-state resistive behavior to encode weights via cell state mapping, combined with FP2 quantization for extreme compression.
-
-**Core concept:**
-- **Weights**: Quantized to FP2-E1M0 (exponent=1, mantissa=0, ±{1.0, 0.5, 0}), then encoded into ReRAM cell states (HRS/LRS/off)
-- **Computation**: Analog crossbar performs weighted sum as current on bitlines (limited by shared sense resistor loading)
-- **Topology variants**: 1T1R (single-ended, unsigned) vs 2T2R (differential, signed)
-- **Golden models**: Independent Python reference implementations for validation against circuit simulation
-
-## Project Structure
-
-### Digital Design (Verilog/SystemVerilog)
-
-| File | Purpose |
-|------|---------|
-| `fp2_packer.v` | Encodes FP2 values into packed block format for datapath |
-| `fp2_packer_dsp.v` | DSP-optimized packing pipeline (area/power variant) |
-| `fp2_unpacker.v` | Decodes FP2 bitstreams to direction & magnitude signals for DAC |
-| `tb_unpacker.v` | Testbench for unpacker RTL verification |
-| `tb_unpacker_export.v` | Exports DAC control signals (`dac_stimulus.txt`) for analog simulation |
-| `tb_accum.v` | Accumulator/post-processing testbench |
-
-### Analog Design (SPICE/Verilog-A)
-
-| File | Purpose |
-|------|---------|
-| `rram_v_1_0_0_openvaf.va` | **Stanford ReRAM compact model** (Verilog-A): physics-based two-state device with gap dynamics, thermal effects, and switching stochasticity |
-| `rram_2x2_crossbar_fixed.sp` | 2×2 crossbar netlist: wordline drivers, ReRAM cells, bitline sense resistors (R_sense loading) |
-| `rram_2stage_lowdisturb_read.sp` | Read operation: low pulse to avoid inadvertent switching |
-| `rram_2stage_strong_pulse.sp` | Program operation: strong pulse to induce SET/RESET transitions |
-| `rram_2stage_program_compute.sp` | Interleaved program + compute: SET/RESET during MAC phases |
-
-### Golden Reference & Validation (Python)
-
-| File | Purpose |
-|------|---------|
-| **`crossbar_array_test.py`** | **Core golden model**: resistive-divider crossbar simulation (no SPICE needed). Implements ideal/noisy MACs, weight grouping, 1T1R vs 2T2R, includes netlist builders for ngspice. |
-| **`crossbar_cli.py`** | **Interactive CLI** for single-run exploration. Specify M×K array, weights, activations, topology → see digital vs analog output per column with error metrics. |
-| **`golden_mac_reference.py`** | **Validation reference** for unpacker RTL. Reads DAC stimulus, decodes FP2→weight, computes expected bitline currents, diffs vs ngspice results with tolerance checking. |
-| `topology_sweep.py` | **Design-space sweep**: varies M (height) and K (width) across both 1T1R and 2T2R; plots error, cell count, and tradeoffs. Essential for architecture selection. |
-| `dac_to_pwl.py` | **Format converter**: transforms RTL-generated `dac_stimulus.txt` → LTspice-compatible PWL voltage files for behavioral simulation without full compact-model SPICE. |
-
-## Key Features
-
-### Quantization
-- **FP2-E1M0**: 2-bit floating point (1 sign, 1 exponent, 0 mantissa bits)
-  - Representable values: `{-1.0, -0.5, 0, +0.5, +1.0}` (5 distinct magnitudes × 2 signs)
-  - Compact: 2 bits per weight (vs 32 for FP32 or 8 for FP8)
-
-### Crossbar Topologies
-
-**2T2R (Differential)**
-- Two transistors + two ReRAM cells per synapse (complementary weight pairs)
-- Signed weights: positive current = +weight, negative = –weight
-- Shared bitline R_sense loading from both cells
-- Higher cell count, but full range [-1.0, +1.0]
-
-**1T1R (Single-Ended)**
-- One transistor + one ReRAM cell per synapse (unsigned only)
-- Cannot represent negative weights (clipped to 0)
-- Half the cell count and area of 2T2R
-- Accuracy trade-off: negative contributions lost
-
-### Golden Models
-
-1. **Resistive-divider (fast, Python-based)**
-   - Treats each ReRAM cell as fixed HRS/LRS resistor
-   - Accurate for steady-state DC current (post-transient)
-   - No SPICE/ngspice needed; ~ms per run
-
-2. **Compact-model (accurate, ngspice-based)**
-   - Full Stanford ReRAM Verilog-A model
-   - Captures gap evolution, thermal dynamics, transient behavior
-   - Slow (~minutes per transient), but ground truth for validation
-
-3. **RTL-to-netlist (end-to-end verification)**
-   - Testbench exports RTL control signals → `dac_stimulus.txt`
-   - DAC stimulus converted → PWL voltage sources
-   - PWL fed into ngspice netlist
-   - Simulated currents diffed against golden reference
-
-## Usage
-
-### 1. Quick Design-Space Exploration (Python Golden Model)
-
-**Compare 1T1R vs 2T2R across array sizes:**
-```bash
-python3 topology_sweep.py \
-  --m-values 2 4 8 16 32 64 128 \
-  --k-fixed 8 \
-  --seeds 5 \
-  --r-sense 20.0 \
-  --out topology_sweep.png
-```
-
-Outputs:
-- Console table: error % and cell count for each (M, K) pair
-- `topology_sweep.png`: 3-panel plot (error vs M, error vs K, cells vs M)
-
-**Sample output:**
-```
-=== M sweep (K fixed) ===
-      M   2T2R err%   1T1R err%  2T2R cells  1T1R cells
-      2       1.25       8.45           32           16
-      8       0.87       5.20          128           64
-     64       0.52       3.10         1024          512
-```
+Every convolution is executed through the actual resistive-divider equations.
+No additive-Gaussian noise surrogate is used anywhere.
 
 ---
 
-### 2. Single-Run Analysis
+## The result in one table
 
-**See digital vs analog output for a specific configuration:**
+CIFAR-10 Top-1, ResNet-18, full 10,000-image test set.
 
-```bash
-# Random 4x3 array, 2T2R, differential weights
-python3 crossbar_cli.py --m 4 --k 3 --topology 2t2r
+| B = M | FP2 digital | crossbar, raw | crossbar, calibrated |
+|------:|------------:|--------------:|---------------------:|
+| 32    | 92.42%      | 77.66%        | **92.42%**           |
+| 64    | 92.47%      | 57.54%        | **92.47%**           |
+| 128   | 92.81%      | 11.60%        | **92.81%**           |
+| 256   | 92.43%      | 10.00%        | **92.43%**           |
 
-# Same, but 1T1R (unsigned) to see sign-loss impact
-python3 crossbar_cli.py --m 4 --k 3 --topology 1t1r
-
-# Explicit weight matrix
-python3 crossbar_cli.py \
-  --weights "1,-1,0.5;-0.5,0.5,0;0.5,0,-1;0,1,0.5" \
-  --activations "1,1,1,1" \
-  --topology 2t2r
-
-# Export ngspice netlist for the above
-python3 crossbar_cli.py \
-  --weights "1,-1,0.5;-0.5,0.5,0;0.5,0,-1;0,1,0.5" \
-  --activations "1,1,1,1" \
-  --topology 2t2r \
-  --netlist-out array.cir
-```
-
-**Output:**
-```
-Topology: 2T2R   M=4  K=3  Rsense=20ohm  Vread=0.1V
-Weights (quantized to FP2):
-  +1.0 -1.0 +0.5
-  -0.5 +0.5 +0.0
-  +0.5 +0.0 -1.0
-  +0.0 +1.0 +0.5
-Activations: [1.0, 1.0, 1.0, 1.0]
-
-Physical cells: 24   Bitlines/TIA channels needed: 6
-
- col     digital (exact)    analog (recovered)    abs err     err %
-   0           1.5000             1.4823           0.0177      1.18
-   1          -0.5000            -0.4914           0.0086      1.72
-   2           0.5000             0.4891           0.0109      2.18
-```
+Uncalibrated readout reaches chance (10 classes) by B=128. Calibration
+restores the digital ceiling exactly at every tile height.
 
 ---
 
-### 3. RTL-to-Analog Verification Flow
+## The problem
 
-**Step 1: Run RTL testbench to generate DAC stimulus**
-```bash
-iverilog -o tb_unpacker_export tb_unpacker_export.v fp2_unpacker.v
-./tb_unpacker_export
-# Produces: dac_stimulus.txt
-```
+FP2-E1M0 stores each weight as one of {-1, -0.5, 0, +0.5, +1}, with B=32
+consecutive weights sharing an 8-bit scale factor.
 
-**Step 2: Convert digital stimulus to analog PWL files**
-```bash
-python3 dac_to_pwl.py dac_stimulus.txt \
-  --time-unit 1e-12 \
-  --vhigh 1.2 \
-  --tr 100e-12 \
-  --outdir ./pwl_files
-# Produces: Dir1.pwl, Mag1_1.pwl, Mag1_0.pwl, Dir2.pwl, Mag2_1.pwl, Mag2_0.pwl
-```
+A crossbar column produces one current, which can carry only one scale factor.
+A tile spanning two blocks would require two scales applied to a sum already
+formed by Kirchhoff's current law. Block size and tile height are therefore the
+same physical parameter:
 
-**Step 3: Run ngspice transient with crossbar netlist**
-```bash
-ngspice -b rram_2x2_crossbar_fixed.sp -o sim_results.log
-# Extracts bitline currents: results.txt
-```
+    B = M
 
-**Step 4: Compare golden model vs ngspice**
-```bash
-python3 golden_mac_reference.py dac_stimulus.txt \
-  --r-hrs 100e3 \
-  --r-lrs 1e3 \
-  --r-sense 1e3 \
-  --vhigh 1.2 \
-  --results results.txt \
-  --tolerance 0.15
-```
+The format specifies 32. ADC amortisation wants 128 or more. That collision is
+what this repository characterises.
 
-**Output:**
-```
-time     Dir1 M1_1 M1_0 Dir2 M2_1 M2_0   w1   w2  R1(ohm)  R2(ohm) I_wl1_exp(A) I_wl2_exp(A)
-0        0    0    0    0    1    0     0.00  1.00  100000   1000    1.1802e-05   1.0813e-04
-1        1    1    0    0    0    1     1.00  0.00   1000    100000  1.0813e-04   1.1802e-05
-```
+## The cause
 
----
+A shared sense resistor R_s lifts the bitline off ground, reducing the voltage
+across every cell in the column. Nodal analysis at the bitline gives:
 
-### 4. Architecture Search
+    v_bl = (sum_i V_i G_i) / (1/R_s + G_col),    G_col = sum_i G_i
 
-**Sweep array dimensions with custom parameters:**
-```bash
-python3 topology_sweep.py \
-  --m-values 4 8 16 32 64 128 256 \
-  --k-values 2 4 8 16 32 64 \
-  --m-fixed 16 \
-  --k-fixed 16 \
-  --r-sense 10.0 \
-  --vread 0.2 \
-  --seeds 10 \
-  --out architecture_sweep.png
-```
+    I_actual = I_ideal / (1 + R_s * G_col)
 
-This produces side-by-side error curves for 1T1R vs 2T2R, helping you choose:
-- **Array height (M)**: affects how many wordlines load the shared sense resistor
-- **Array width (K)**: minimal impact on error (sanity check that K doesn't cause systematic degradation)
-- **Topology**: 1T1R saves area but loses negative weights; 2T2R is full-range but doubled area
+No activation term appears in the denominator. The error is a deterministic
+function of the programmed conductances, not noise. Additive zero-mean models
+cannot represent it, which is why the failure mode is invisible to the standard
+evaluation methodology.
+
+Fraction of ideal current reaching the ADC:
+
+| M | 32 | 128 | 256 |
+|---|---:|----:|----:|
+| retained | 73.9% | 41.5% | 26.0% |
+
+## The fix
+
+One constant per column, computed at compile time:
+
+    c_j = 1 + R_s * sum_i G_ij
+
+2T2R reads both bitlines separately, so each is scaled by its own constant
+*before* the differential subtraction. Correcting after subtraction does not
+cancel, because the two lines carry different total conductances. The algebra
+collapses to the ideal product:
+
+    (G_p - G_n)^T V
+
+Cost: one multiply per column, foldable into the block-scale multiply already
+present in the digital path.
 
 ---
 
-## Dependencies
+## Validation
 
-### Python
-```bash
-pip install matplotlib  # for plotting (topology_sweep.py)
-```
+| Level | Checked against | Worst disagreement |
+|---|---|---|
+| ngspice DC solve | reference | -- |
+| closed-form nodal model | ngspice, 87,168 tiles | 3.41e-7 % |
+| vectorised GPU solver | nodal model | < 1e-12 relative |
+| end-to-end inference | vectorised solver | same code path |
 
-### Simulation
-- **Verilog simulation**: Icarus Verilog (`iverilog`), or any IEEE 1364 compatible simulator
-- **SPICE simulation**: ngspice (open source) or commercial (Cadence Spectre, Synopsys HSPICE)
-- **RRAM model**: Stanford compact model (included as `rram_v_1_0_0_openvaf.va`)
+Every tile of every layer, 357 M MAC-reads, zero errors.
 
-### No external dependencies for golden models
-```bash
-python3 golden_mac_reference.py dac_stimulus.txt  # pure Python, no NumPy/SciPy
-```
-
-## File Format Specifications
-
-### `dac_stimulus.txt` (RTL Export)
-Generated by `$fdisplay` in testbench; consumed by `golden_mac_reference.py` and `dac_to_pwl.py`:
-```
-# time_ns Dir1 Mag1_1 Mag1_0 Dir2 Mag2_1 Mag2_0
-0 0 0 0 0 0 0
-1 0 1 0 0 0 1
-2 1 0 1 0 1 0
-```
-- `time_ns`: absolute time in picoseconds (Icarus $time in finest precision units)
-- `Dir1/Dir2`: sign bit (0=positive, 1=negative)
-- `Mag1_1/Mag1_0, Mag2_1/Mag2_0`: 2-bit magnitude encoding
-
-### `results.txt` (ngspice Output)
-Generated by wrdata; consumed by `golden_mac_reference.py`:
-```
-0.0e+00 1.1802e-05 0.0e+00 1.0813e-04
-1.0e-09 1.1800e-05 1.0e-09 1.0815e-04
-```
-- Four columns: `time_s I_wl1 time_s I_wl2` (wrdata interleaves dual traces)
-
-### `.pwl` Files (LTspice Format)
-Generated by `dac_to_pwl.py`; consumed by ngspice via `.include` or direct source:
-```
-0.0000e+00 0.0000
-1.0000e-10 0.0000
-1.1000e-10 1.2000
-1.2000e-10 1.2000
-2.0000e-10 0.0000
-```
-- Two columns: `time_s voltage_v`, piecewise-linear interpolation
-
-## Known Limitations & Trade-offs
-
-| Feature | 2T2R | 1T1R |
-|---------|------|------|
-| **Signed weights** | ✓ Full range [–1, +1] | ✗ Unsigned only [0, +1]; negatives clipped |
-| **Cell count** | 2MK | MK |
-| **Bitlines** | 2K (differential) | K (single-ended) |
-| **TIA channels** | 2K | K |
-| **Typical error** | 0.5–1.5% | 3–8% (sign-loss dominated) |
-| **Area (normalized)** | 1.0× | 0.5× |
-
-**Design choice**: 2T2R for maximum accuracy; 1T1R for extreme area/power constraints where model sparsity can compensate for sign clipping.
-
-## Key Assumptions in Golden Model
-
-1. **Steady-state DC only**: Resistive-divider model is valid post-transient; edges modeled as instantaneous (conservative for current peaks).
-2. **Two-state resistor**: Each cell is HRS (off, 100kΩ) or LRS (on, 1kΩ) per magnitude; mid-range values (0.5) mapped to LRS (configurable via `--r-mid`).
-3. **Shared R_sense loading**: Single sense resistor per bitline; current divider between parallel cells dominates error scaling with M.
-4. **Ideal DAC**: All control signals switch crisply; no cross-talk or timing skew.
-
-These are conservative for a simple validation layer; the ngspice flow with the full compact model provides ground truth.
-
-## Next Steps / TODOs
-
-- [ ] **Multi-layer integration**: Stack multiple 2D crossbar slices to form a systolic PE array (16×16 or larger)
-- [ ] **Hessian-K-means weight grouping**: Cluster weights to reduce unique cell states, improving yield and programmability
-- [ ] **Datapath integration**: Feed unpacker → crossbar MAC → accumulator → output formatting
-- [ ] **Power/timing analysis**: Extract energy per MAC from SPICE; overlay on accuracy vs area Pareto frontier
-- [ ] **Behavioral model (no SPICE)**: Replace compact model with simplified Verilog for faster iteration
-- [ ] **Layout & parasitic extraction**: Place-and-route crossbar; include interconnect R/C
-
-## References
-
-- **FP2-E1M0 quantization**: Extreme-precision floating point for low-precision inference
-- **ReRAM compact models**: Stanford RRAM model (gap-based switching dynamics)
-- **Analog compute**: Crossbar MAC from [citation: analog NN inference papers]
-- **Mixed-radix design**: [Your design notes / papers]
-
-## Contact & Contributions
-
-This is an active research/design project. For bugs, feature requests, or design discussions, please:
-1. Check existing issues in documentation
-2. Document reproducible test cases (Python + netlist combo)
-3. Propose changes with golden-model validation (diff before/after)
+Device parameters, from SPICE calibration of the `rram_v_1_0_0` Verilog-A
+model: R_LRS = 542.8 ohm, R_MID = 1099.8 ohm, R_HRS = 218587.2 ohm
+(on/off ratio 403), R_sense = 20 ohm, V_read = 0.1 V.
 
 ---
 
-**Project Status**: Verification infrastructure complete; RTL and testbenches in progress.  
-**Last Updated**: August 2026
+## Layout
 
+```
+*.py                    simulation, evaluation, hardware model, figures
+rtl/                    SystemVerilog/Verilog periphery and testbenches
+spice/                  ngspice decks and the Verilog-A ReRAM model
+docs/                   report, explainer (PDF + LaTeX source), open items
+index.html, server.py   browser dashboard
+run_all.sh              full pipeline, staged
+run_blocking.sh         pre-submission checklist, staged
+```
+
+Key modules:
+
+| File | Role |
+|---|---|
+| `analog_eval.py` | End-to-end inference through the crossbar equations. Holds the ADC, variability and drift models. |
+| `crossbar_array_test.py` | Scalar reference solver and ngspice netlist generation. |
+| `ngspice_full_sweep.py` | Exhaustive per-tile ngspice validation, parallel and resumable. |
+| `benchmark_resnet18.py` | Per-layer SNR and readout error against a golden model. |
+| `qat_finetune_fp2.py` | FP2 quantization-aware training with a straight-through estimator. |
+| `hw_model.py` | Area, energy and delay. Every assumption is a named, overridable constant. |
+| `codesign_sweep.py` | Block-size Pareto sweep and the SRAM baseline. |
+| `make_figures.py`, `figures_sweeps.py` | All figures and LaTeX tables, generated from the CSVs. |
+
+---
+
+## Requirements
+
+```bash
+pip install -r requirements.txt
+```
+
+ngspice is required only for the SPICE validation paths:
+
+```bash
+sudo apt install ngspice
+```
+
+A CUDA GPU is optional. Full-test-set sweeps take minutes on a GPU and hours
+on CPU.
+
+## Quick start
+
+```bash
+# verify the solver against its scalar reference
+python3 analog_eval.py --self-test
+
+# the headline sweep: raw vs calibrated at four tile heights
+python3 analog_eval.py --sweep 32,64,128,256 --data-dir ./data \
+  --max-images 0 --adc-bits 6 --out-csv analog_accuracy.csv
+
+# figures and LaTeX tables
+python3 make_figures.py --outdir paper/figures
+python3 figures_sweeps.py --outdir paper/figures
+
+# dashboard
+python3 server.py --fetch-vendor && python3 server.py --port 5057
+```
+
+`run_all.sh` runs any stage or all of them, with live output and per-stage
+logs. `run_all.sh` with no argument lists the stages.
+
+---
+
+## Scope and limitations
+
+Stated plainly, because several of these bound the claim.
+
+- **Drift.** ReRAM conductance relaxes as a power law. A calibration computed
+  once at manufacture loses 27 points after a simulated year. Recomputing it
+  from the drifted array holds accuracy within 0.8 points indefinitely. The
+  supported claim is calibration *with periodic refresh*, not compile-time
+  calibration. Roughly ten refreshes over a product lifetime suffice, since
+  damage accumulates with the logarithm of time.
+- **Die area.** At B=128, fully weight-stationary ResNet-18 models to 412 mm2
+  at 65 nm. The argument depends on scaled nodes.
+- **Write cost.** Reprogramming is ~100 pJ/cell against ~0.001 pJ/cell to read.
+  Break-even against time-multiplexing is ~2200 images, so only fully
+  weight-stationary operation is viable.
+- **Wordline IR drop** is not modelled. Unlike bitline loading it is
+  activation-dependent, so it would *not* reduce to a compile-time constant.
+  This is the most likely remaining threat to the contribution.
+- **Level mapping.** R_MID/R_LRS = 2.0262 rather than exactly 2, and finite HRS
+  leakage shifts every level. Level 0.5 lands at 0.492. Separate from readout
+  error, currently absorbed into the reported digital ceiling.
+- **RTL.** `rtl/resnet18_reram_top.sv` has no behavioural model at the ADC
+  boundary, so the RTL cross-check reports N/A. The synthesis flow is blocked
+  on this.
+- **NeuroSim comparison** is VGG-8 against ResNet-18 and is not like-for-like.
+
+`docs/TODO.md` tracks open items, including two retracted claims and the
+reasoning behind each retraction.
+
+## Reproducing the figures
+
+Every number traces to a named CSV, and every figure and table is regenerated
+from those CSVs by `make_figures.py` and `figures_sweeps.py`. Captions that
+state a threshold derive it from the data rather than hardcoding it.
+
+## Citation
+
+```bibtex
+@misc{fp2reram,
+  title  = {Block Size Is Tile Height: Loading-Gain Calibration for
+            2-bit Floating-Point Compute-in-Memory},
+  author = {Nandi, Shaivi},
+  year   = {2026},
+  note   = {https://github.com/<user>/fp2-reram-crossbar}
+}
+```
+
+## License
+
+MIT. See `LICENSE`.

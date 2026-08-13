@@ -214,8 +214,8 @@ def build_column_netlist(osdi_path, weights, activations, r_program, r_sense,
 
         # Reset-pulse PWL that only fires while THIS row's own select switch
         # is closed (during its own slot) -- riding on top of the driver.
-        # The switch closes at slot_start+0.01ns (see sel_points above); we
-        # then wait `switch_settle_ns` before the RESET pulse actually
+        # The switch closes at slot_start+0.01ns (see sel_points above); the
+        # stimulus then waits `switch_settle_ns` before the RESET pulse actually
         # starts ramping, instead of the previous hardcoded 0.04ns gap, so
         # this can be swept to test whether the switch's own Ron transition
         # needs more time to fully settle before the pulse hits the cell.
@@ -376,7 +376,7 @@ def main():
     margin = args.slot_duration - (0.01 + args.switch_settle_ns + per_row_width)
     if margin < 5.0:
         print(f"  WARNING: only {margin:.2f}ns of slot margin left after settle+pulse -- "
-              f"consider raising --slot-duration if you push --switch-settle-ns higher.")
+              f"raise --slot-duration when --switch-settle-ns is pushed higher.")
     print()
 
     # --- Golden computations ---

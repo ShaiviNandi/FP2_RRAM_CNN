@@ -14,7 +14,7 @@ single rram_v_1_0_0 cell, and for each one:
 
 WHY A LOW-IMPEDANCE WRITE PATH: this model's cell current is exponential
 in Vtb (Itb = I0*exp(-gap/g0)*sinh(Vtb/V0), V0=0.25V), so the cell's own
-terminal voltage self-limits, diode-like, no matter how hard you drive the
+terminal voltage self-limits, diode-like, regardless of how hard the device is driven at the
 supply, UNLESS the series (sense/write) resistance is small enough that it
 doesn't eat the applied voltage. Confirmed experimentally in this session:
 1kOhm sense resistor -> no observable RESET even at -8V supply. 20Ohm
@@ -27,9 +27,9 @@ read circuit, just characterize the cell's write response.
 WHAT THIS DOES NOT MODEL: thermal accumulation across repeated pulses
 (each sweep point starts from a fresh gap_ini), and it does not attempt to
 find a true "3-level" write-verify recipe automatically -- it reports the
-calibration DATA so you can pick pulse parameters for HRS / mid / LRS
-targets, that decision is left to you (and should probably be re-checked
-against your actual target R_HRS/R_LRS spec, which this script doesn't
+calibration DATA for selecting pulse parameters for HRS / mid / LRS
+targets, that decision is left to the operator (and should be re-checked
+against the actual target R_HRS/R_LRS spec, which this script does not
 know).
 
 Usage:
@@ -245,12 +245,12 @@ def main():
             print(f"--r-hrs-threshold ({args.r_hrs_threshold} ohm). Either narrow the sweep")
             print("around the transition (the jump from near-LRS to near-HRS may be sharp")
             print("given how steep this model's switching kinetics are), or adjust")
-            print("--r-hrs-threshold if your actual target intermediate resistance differs.")
+            print("--r-hrs-threshold when the target intermediate resistance differs.")
         print()
         print("NOTE: 'ProgV_cell(V)' above is an ESTIMATE using the LRS-state divider ratio,")
         print("not a direct per-run measurement (the compute-phase read row doesn't carry")
         print("the programming-phase operating point). Treat it as directional, not exact --")
-        print("if you need the exact voltage trajectory during programming, add a wrdata")
+        print("for the exact voltage trajectory during programming, add a wrdata")
         print("point at t=width_ns/2 to the netlist template instead of only the final row.")
 
     if not args.keep_files:

@@ -7,10 +7,10 @@ Input file format (one line per sample, whitespace separated):
     # comment lines starting with '#' are ignored
     <time> <Dir1> <Mag1_1> <Mag1_0> <Dir2> <Mag2_1> <Mag2_0>
 
-<time> is assumed to be in the same units $time reports for your
+<time> is assumed to be in the same units $time reports for the
 `timescale (this testbench uses `timescale 1ns/1ps, and because Icarus
 prints $time in units of the finest precision in the design, the raw
-numbers in dac_stimulus.txt are picoseconds -- adjust --time-unit if your
+numbers in dac_stimulus.txt are picoseconds -- adjust --time-unit when the
 own testbench's timescale differs).
 
 For each signal column, writes a separate two-column PWL file
@@ -66,7 +66,7 @@ def build_pwl(rows, col_index, vhigh, tr):
             points.append((t, v))
         else:
             # level unchanged: no new point needed, PWL holds last value,
-            # but we add one anyway so the file is easy to eyeball/debug
+            # but one is added anyway so the file is easy to eyeball/debug
             points.append((t, v))
         prev_val = val
     return points
