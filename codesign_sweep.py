@@ -470,6 +470,14 @@ def main():
     ap.add_argument("--weights", type=int, default=11_157_504,
                     help="Weight count for the baseline table (default: the "
                          "crossbar-mapped weights of CIFAR ResNet-18)")
+    ap.add_argument("--reuse-sweep", default=None, metavar="LIST",
+                    help="Report the weight-fetch term across a range of reuse "
+                         "factors, e.g. 1,10,100,1000. Reuse=1 (batch-1 "
+                         "inference on FC and 1x1 convs) maximally flatters "
+                         "in-memory compute; a well-blocked batched conv "
+                         "reuses each weight thousands of times and the term "
+                         "nearly vanishes. Reporting the curve rather than a "
+                         "single point is the honest presentation.")
     ap.add_argument("--reuse", type=float, default=1.0,
                     help="Weight reuse factor for the digital baseline. 1 = "
                          "batch-1 inference on 1x1/FC layers, the regime that "
@@ -524,6 +532,23 @@ def main():
     if args.self_test:
         raise SystemExit(self_test())
 
+    if args.reuse_sweep:
+        reuses = [float(x) for x in args.reuse_sweep.split(",")]
+        print("\n" + "=" * 78)
+        print("WEIGHT-FETCH TERM vs REUSE  -- the single most contested number")
+        print("=" * 78)
+        print(f"{'reuse':>10}{'SRAM fetch pJ/MAC':>22}{'ReRAM':>10}"
+              f"{'SRAM total adv.':>18}")
+        print("-" * 78)
+        for r in reuses:
+            b = digital_baseline(args.weights, weight_reuse=r)
+            mv = b["movement"]
+            print(f"{r:>10.0f}{mv['sram_fetch_pj_per_mac']:>22.6f}"
+                  f"{0.0:>10.1f}{mv['sram_fetch_pj_per_mac']:>18.6f}")
+        print("-" * 78)
+        print("The fetch advantage falls as 1/reuse. Quoting reuse=1 alone")
+        print("overstates the in-memory-compute case; quote the curve.")
+        print()
     print_baseline(digital_baseline(args.weights, weight_reuse=args.reuse))
     if args.baseline_only:
         return

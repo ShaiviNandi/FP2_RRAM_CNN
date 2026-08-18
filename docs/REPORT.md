@@ -16,7 +16,7 @@ energy efficiency, and that the underlying obstacle — a shared-sense-resistor
 loading error previously treated as noise — is in fact a deterministic gain
 that can be divided out with one constant per column, computed at compile time.
 Removing it lets us use a 4× taller tile, which together with the narrower ADC
-that becomes affordable yields **13.6× better energy efficiency and 14.8 more
+that becomes affordable yields **13.1× better energy efficiency and 14.8 more
 accuracy points at once**, verified end-to-end against exhaustive SPICE
 simulation.
 
@@ -32,9 +32,11 @@ simulation.
 | CIFAR-10 Top-1 | 77.66% | **92.43%** |
 | Gap to FP2-digital (92.81%) | −15.15 pts | **−0.38 pts** |
 | Energy per MAC | 0.323 pJ | **0.0237 pJ** |
-| Energy efficiency | 6.2 TOPS/W | **84.4 TOPS/W** |
+| Energy efficiency | 6.2 TOPS/W | **81.3 TOPS/W** |
 
-**+14.77 accuracy points and 13.6× energy efficiency, simultaneously.**
+**+14.77 accuracy points and 13.1× energy efficiency, simultaneously.**
+
+*Measured directly at 6-bit (`hw_model --adc-bits 6`), not rescaled. This figure is TILE-LEVEL: it counts array, ADC, DAC and partial-sum only. NeuroSim's chip-level accounting adds ~20.8% for interconnect, buffers, pooling and activation, which would put the comparable chip-level figure near 64 TOPS/W. State which one is being quoted.*
 
 All accuracy figures are the full 10 000-image CIFAR-10 test set.
 
@@ -224,13 +226,27 @@ task, and that should be reported rather than smoothed over.
 |---|---|---|
 | ADC share of energy | 55.6% (M=128, 8-bit) | 68.0% |
 | ADC share of area | 55.2% | 19.2% |
-| TOPS/W | 13.8 | 30.3 |
+| TOPS/W | 81.3 (tile-level) | 29.29 (chip-level) |
 
 Different tool, different methodology, same conclusion: the ADC dominates.
 NeuroSim's area figure comes from transistor-level sizing and is better than
 ours; adopt it.
 
-**Caveat on the rebuild.** `Param.cpp` now carries our device
+**Resolved.** The comparison has now been re-run at the correct device
+parameters (`resistanceOn=542.8`, `resistanceOff=218587.2`, `--onoffratio 403`,
+all verified in the build log). Efficiency moved 30.3 -> 29.29 TOPS/W, about 3%
+*worse*, so the half-converted caveat below turned out not to matter. The
+conclusion is unchanged.
+
+**A more serious asymmetry, found while resolving the above.** NeuroSim's
+per-image energy splits ADC 68.0%, accumulation 11.2%, other peripheries 20.8%
+(interconnect, buffers, pooling, activation). `hw_model.py` has no category for
+that last group at all -- it counts array, ADC, DAC and partial-sum, and stops.
+Most of the 2.8x efficiency advantage over NeuroSim is therefore an accounting
+difference rather than a design difference. Either add an interconnect term or
+label the figure tile-level.
+
+**Superseded caveat on the rebuild.** `Param.cpp` now carries our device
 (`resistanceOn=542.8`, `resistanceOff=218587.2`, ratio 403, verified in the
 build log), but the run still reported `onoffratio: 10`. Those are two separate
 parameters in DNN+NeuroSim: the C++ side drives the circuit model, the Python

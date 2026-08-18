@@ -1,5 +1,65 @@
 # What's left
 
+> **Status, current.** Every runnable experiment is done: A2, A3, A4 and
+> B1-B7. The novelty search is done and written up in `NOVELTY.md`; it
+> narrowed the claim and added two required experiments. What remains is
+> writing, plus the two baselines named below.
+
+> Methodology, assumption provenance and sensitivity sweeps are in
+> `METHODOLOGY.md`. The BN baseline (N2) is implemented in
+> `bn_baseline.py` and needs running.
+
+## Added by the novelty search (see NOVELTY.md)
+
+| # | Item | Why | Effort |
+|---|---|---|---|
+| N1 | **Address the transimpedance-amplifier objection in the introduction.** A TIA holds the bitline at virtual ground, so the loading term never arises. Without this, the work reads as solving a self-inflicted problem. Argue passive sensing on area, static power and bandwidth. | blocking | 1 h |
+| N2 | **Run BatchNorm recalibration as a baseline.** It is retraining-free and reported within 0.16% of FP, so it is the closest competitor. The claim that a per-layer scalar cannot capture per-column variation in `G_col` is currently an argument, not a result. | blocking | 1 session |
+| N3 | Add a TIA cost row to the efficiency table. | 30 min |
+| N4 | Read the six primary sources, not the survey. Check specifically whether any prior work corrects **per column** rather than per layer. | **You** | 2 h |
+
+## Resolved since the last revision
+
+- **A1 novelty search** -- done, `NOVELTY.md`.
+- **A2** -- Pareto and hw_model re-run at 6 bit. **81.3 TOPS/W**, not the
+  hand-rescaled 84.4. Efficiency gain is **13.1x**, not 13.6x.
+- **A3** -- all figures and tables regenerated.
+- **A4** -- stale RESULTS.md archived.
+- **B1** -- variability at 10 seeds, full test set. Blind calibration loses
+  0.90 pts at sigma=20%. Blind is now consistently *better* than write-verify
+  at high sigma across all four tile heights, which strengthens the no-read-back
+  claim. Worth understanding why before publishing it.
+- **B2** -- **the drift-vs-tile-height mechanism is confirmed.** Stale cost
+  shrinks monotonically with R_s at every tile height, and the tile-height
+  spread grows from -4.73 pts at R_s=5 to -12.81 at R_s=20. That is what an
+  `R_s*G_col` mechanism predicts, so the trend is explained rather than merely
+  observed and survives the "found after looking at the data" objection.
+- **B3** -- **refresh holds within 2 pts up to sigma_nu = 0.004, and fails at
+  0.008** (90.54%, -2.27 vs ceiling; refreshing worth only +2.4 pts at 0.016).
+  Report that boundary rather than asserting one value.
+- **B4** -- level-mapping error quantified: level 0.5 lands at 0.49228
+  (-1.543%). Fix is a -1.54% trim of R_MID to 1082.91 ohm, verified exact.
+- **B5** -- wire parasitics isolated. Wordline metal is mild (1.8% at 0.5 ohm);
+  **wordline driver (25.4% at 50 ohm) and bitline metal (49.1% at 0.5 ohm) are
+  not corrected** by the per-column constant. A fitted per-column gain does not
+  transfer to unseen activations at M=256.
+- **B6** -- NeuroSim re-run at on/off 403. 30.3 -> **29.29 TOPS/W**, ~3% worse,
+  so the half-conversion caveat did not matter. Conclusion unchanged.
+- **B7** -- ADC and cell area sourced three ways. TOPS/W spans **81.3 to 142.2**
+  depending only on the ADC figure of merit. Report the spread. Weight-reuse
+  curve implemented; quote the curve, not reuse=1.
+
+## Two claims that must be narrowed before submission
+
+1. **"The analog error is a compile-time constant"** -> true of the `R_sense`
+   term only. Distributed wire parasitics are not compile-time correctable.
+2. **"81.3 TOPS/W"** -> tile-level. Chip-level, adding NeuroSim's 20.8%
+   interconnect/buffer/pooling share, is nearer 64. A fully integrated
+   neuromorphic chip in the literature reports 78.4 TOPS/W at chip level.
+
+---
+
+
 Ordered by whether it blocks submission. Effort is my estimate of a session's
 work, not calendar time.
 

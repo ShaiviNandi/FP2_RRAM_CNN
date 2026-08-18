@@ -186,6 +186,11 @@ Stated plainly, because several of these bound the claim.
   on this.
 - **NeuroSim comparison** is VGG-8 against ResNet-18 and is not like-for-like.
 
+`METHODOLOGY.md` documents every model and the provenance of every
+assumed constant, including the `[SIM]/[MODEL]/[ASSUM]` tiers and the
+sensitivity sweeps behind the softest inputs. `NOVELTY.md` positions the
+work against the non-ideality mitigation literature.
+
 `docs/TODO.md` tracks open items, including two retracted claims and the
 reasoning behind each retraction.
 

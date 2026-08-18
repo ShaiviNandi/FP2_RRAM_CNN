@@ -206,10 +206,9 @@ def build_calibration_batch(args, res):
     channel statistics, whereas real images give sparse, heavy-tailed,
     spatially-correlated ones with a large fraction of exact zeros post-ReLU.
     Those are different distributions and they do not yield the same MAC
-    error. Earlier revisions of this file ran `torch.randn(1,3,res,res)`
-    while the module docstring claimed "REAL input-activation statistics" --
-    that was wrong, and --calib-dataset is the fix. `random` is retained
-    only so the old numbers stay reproducible, and it warns."""
+    error. `--calib-dataset random` feeds Gaussian noise and is retained only
+    for reproducing older numbers; it emits a warning. Use `cifar10` for any
+    reported figure."""
     if args.calib_dataset == "random":
         print("WARNING: --calib-dataset random feeds the network Gaussian NOISE, not "
               "images. Every SNR/RelErr number below is then measured against "

@@ -888,6 +888,92 @@ into a multiply that already exists in the datapath, and the accuracy comes
 back completely.''
 \end{saybox}
 
+\section{An unexpected consequence: the sense resistor becomes free}
+\label{sec:rsensefree}
+
+There is a second payoff, and it took an outside paper to notice it.
+
+Roy, Patil and Shanbhag (ISCAS 2022) worked out analytically what limits the
+accuracy of any resistive crossbar. They found that the sensing resistance has
+an \emph{optimum}. Too small and the signal is weak, so the ADC's quantisation
+steps eat it. Too large and the signal clips against the converter's range.
+The two effects balance at one value, and for ReRAM they put that value at
+$835\,\Omega$.
+
+Our design used $20\,\Omega$ --- forty times smaller. Not by analysis, but by
+necessity: the loading error $1+R_s G_{\mathrm{col}}$ grows with $R_s$, so an
+uncalibrated array is pushed toward the smallest sense resistor it can
+tolerate, and pays for that with a weak signal.
+
+Calibration removes the loading term exactly. So the reason for staying small
+disappears. That is a testable prediction, and it was tested.
+
+\begin{table}[h]
+\centering
+\caption{Sensing resistance sweep, $B{=}M{=}128$, 6-bit ADC, full 10\,000-image
+test set. Digital ceiling $92.81\%$.}
+\begin{tabular}{rrrr}
+\toprule
+$R_s$ ($\Omega$) & Raw & Calibrated & Gap \\
+\midrule
+20   & 11.61\% & 92.43\% & $-0.38$ \\
+100  & 10.00\% & 92.62\% & $-0.19$ \\
+200  & 10.00\% & 92.59\% & $-0.22$ \\
+400  & 10.00\% & 92.58\% & $-0.23$ \\
+600  & 10.00\% & 92.52\% & $-0.29$ \\
+\textbf{835} & \textbf{10.00\%} & \textbf{92.59\%} & $\mathbf{-0.22}$ \\
+1200 & 10.00\% & 92.30\% & $-0.51$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Read the raw column first. From $100\,\Omega$ upward it is pinned at exactly
+$10.00\%$ --- one class in ten, pure chance. An uncalibrated crossbar
+\emph{cannot operate at the analytically optimal sense resistance at all.} It
+is not merely worse there; it is destroyed.
+
+Now the calibrated column: $92.30$ to $92.62\%$ across a sixty-fold range of
+$R_s$. A spread of $0.32$ points. At the optimal $835\,\Omega$ it is within
+$0.22$ points of the digital ceiling --- and slightly \emph{better} than at
+the $20\,\Omega$ we had been using.
+
+\begin{saybox}{How to say this}
+``An independent group derived the SNR-optimal sense resistance for ReRAM
+crossbars analytically and got 835 ohms. Our uncalibrated array is at chance
+there --- it cannot use that operating point. With calibration we are within
+0.22 points of digital, and accuracy is flat within a third of a point across
+a sixty-fold range of sense resistance. So the correction does not just
+recover accuracy at one operating point; it hands back the sense resistor as a
+free design parameter, including the value that independent analysis says is
+optimal.''
+\end{saybox}
+
+\section{The same paper explains the device sweep}
+
+That paper gives a second result which lines up with something we had measured
+but could not explain.
+
+They prove that compute SNR depends on the resistive \emph{contrast}
+$R_{\mathrm{off}}/R_{\mathrm{on}}$ and \emph{not} on the absolute value of
+$R_{\mathrm{on}}$, because raising $R_{\mathrm{on}}$ scales signal and noise
+equally. They also find the benefit of higher contrast saturates once it
+passes roughly $12$ to $15$; beyond that, DAC mismatch and cell variation
+dominate instead.
+
+Both match our measurements, which were taken before we read the paper:
+
+\begin{itemize}
+\item We swept $R_{\mathrm{LRS}}$ over $184\times$ with the contrast held at
+      $403$, and calibrated accuracy stayed within $0.40$ points. Their theory
+      says it should --- SNR does not depend on absolute $R_{\mathrm{on}}$.
+\item We tested an MRAM-like device at a contrast of $3$ and got chance. Their
+      threshold is $12$--$15$, so a contrast of $3$ is far below the point
+      where the device stops being the limiter. It should fail, and it does.
+\end{itemize}
+
+An experiment agreeing with an independent analytical prediction is worth much
+more than either result alone. Say so.
+
 %=====================================================================
 \part{The Evidence}
 \chapter{Proving the Simulator Is Right}
@@ -988,6 +1074,62 @@ differs, the numbers move --- though the \emph{structure} of the argument
 (that the loading error is a deterministic function of programmed
 conductance) does not depend on the particular values.
 \end{warnbox}
+
+\section{The constants that stopped being assumptions}
+
+When this chapter was first written, most of the periphery constants carried
+\texttt{[ASSUM]}. Reading the source literature closed nearly all of them. The
+table below is the current state, because a reviewer will ask and the answer
+should be one lookup rather than an argument.
+
+\begin{table}[h]
+\centering
+\caption{Periphery constants and their sources. ``Derived'' means the number
+was computed here from what the paper reports rather than quoted from it; the
+arithmetic is recorded in \texttt{CITATIONS.md} so it can be checked.}
+\begin{tabular}{lp{7.4cm}}
+\toprule
+Constant & Source \\
+\midrule
+ADC 20 fJ/conv-step & Firlej \emph{et al.}, JINST 2024. 10-bit SAR, 65\,nm,
+50--90\,MSps. Derived FoM $15.9$--$24.4$\,fJ; our value sits between their
+40 and 80\,MSps points, at matching node and architecture. \\
+1T1R cell $40\,F^2$ & Bracketed by two fabricated parts: $31\,F^2$ at 90\,nm
+(Shim \emph{et al.}, SSC-L 2020) and $84\,F^2$ at 40\,nm. \\
+6T SRAM cell $140\,F^2$ & Measured range is $150$--$200\,F^2$ (same Shim
+paper). Our value is \emph{below} it, i.e.\ generous to SRAM. \\
+SRAM leakage 120\,pW/bit & Verma \& Chandrakasan, JSSC 2008 --- 65\,nm, no
+node scaling. $8.39$\,pW/bit derived at 0.35\,V; their own DIBL figure
+($\geq 10\times$ from 0.3\,V to 1\,V) puts 1.2\,V at $125$--$170$\,pW/bit. \\
+SRAM read 0.31\,pJ/bit & Horowitz ISSCC 2014, 32\,KB cache, 20\,pJ per 64-bit
+access. \\
+INT8 MAC 0.59\,pJ & Horowitz Fig.\ 1.1.9: $0.2 + 0.03$\,pJ at 45\,nm 0.9\,V,
+scaled $\times 2.57$ to 65\,nm 1.2\,V. \\
+DRAM 10\,pJ/bit & Horowitz, improved-I/O floor. His contemporary figure is
+$>20$; the optimistic one is used so the baseline is not strawmanned. \\
+Write ${\sim}100$\,pJ/cell & Perez \emph{et al.}, TED 2021. One 1.2\,V,
+1\,\textmu s pulse at $10$--$40\,\mu$A is $12$--$48$\,pJ; write-verify applies
+several. \\
+\midrule
+MAC unit area & \textbf{Still uncited.} Excluded from every reported area
+figure. It is 1.2\% of the digital baseline's footprint, where the buffer is
+99\%, so nothing depends on it. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{keybox}{Two of these corrections went against us, and that is the point}
+The SRAM read energy was originally $0.05$\,pJ/bit and the FP2 MAC $0.03$\,pJ.
+Both were roughly an order of magnitude too kind to the digital baseline we
+were comparing against --- which is to say, both flattered our result.
+
+Fixing them changed the conclusion. Under the old constants the digital
+baseline actually \emph{beat} in-memory compute at high weight reuse
+($66.5$ against $65.6$\,TOPS/W). Under the cited constants it does not, at any
+reuse. The result we now report is both stronger and better founded, and it
+was found by checking the numbers that helped us rather than only the ones
+that hurt.
+\end{keybox}
 
 \section{The assumptions that matter most, and their sensitivity}
 
@@ -1493,15 +1635,88 @@ a comparable configuration:
  & This work & NeuroSim \\
 \midrule
 ADC share of energy & 55.6\% & 68.0\% \\
-ADC share of area & 55.2\% & 19.2\% \\
+ADC share of area & 55.2\%$^\dagger$ & 19.2\% \\
 Energy efficiency & 13.8 TOPS/W & 30.3 TOPS/W \\
 \bottomrule
 \end{tabular}
 \end{table}
 
+$^\dagger$\,\textbf{Different denominators, and the row is only honest with
+this footnote.} Our 55.2\% is of \emph{tile} area --- array, converters, input
+drive and accumulation. NeuroSim's 19.2\% is of \emph{chip} area, which also
+contains interconnect, global buffer and pooling. The numbers are not in
+conflict and must not be read as a disagreement.
+
 Different tool, different methodology, same qualitative conclusion: the ADC
-dominates. NeuroSim's area figure comes from transistor-level sizing and is
+is a leading cost. NeuroSim's area figure comes from transistor-level sizing and is
 better grounded than ours, so we adopt it.
+
+\section{The chip area breakdown, and a lesson about searching}
+
+For a long time this project believed that seventy per cent of NeuroSim's
+reported chip area was unaccounted for --- that the printed components did not
+add up to the printed total, and that an area argument therefore could not be
+made. That belief was wrong, and how it survived is worth recording.
+
+The components were being extracted from the log with a text search that
+required the word ``area'' in the line. NeuroSim prints this:
+
+\begin{quote}\small\ttfamily
+Other Peripheries (e.g.\ decoders, mux, switchmatrix, buffers, IC, pooling and
+activation units) on chip : 1.15e+07um\^{}2
+\end{quote}
+
+That line contains neither ``area'' nor ``array''. It was silently dropped,
+and a dropped component looks exactly like missing silicon. Two other lines
+were missed the same way. \textbf{A search that fails and a quantity that is
+genuinely absent produce identical output, and only one of them is a finding.}
+
+The fix was to match on the \emph{unit} instead --- any line of the form
+\texttt{label : number um\^{}2} --- so the label can be anything. With that,
+the breakdown closes.
+
+\begin{table}[h]
+\centering
+\caption{NeuroSim V1.4 chip area, VGG-8, 65\,nm. Total $80.06$\,mm².}
+\begin{tabular}{lrr}
+\toprule
+Component & Area (\textmu m²) & Share \\
+\midrule
+CIM array           & 21{,}031{,}200 & 26.3\% \\
+Accumulation circuits & 16{,}177{,}500 & 20.2\% \\
+ADC                 & 15{,}384{,}400 & 19.2\% \\
+Interconnect        & 12{,}141{,}100 & 15.2\% \\
+Other peripheries   & 11{,}549{,}600 & 14.4\% \\
+\midrule
+Named subtotal      & 76{,}283{,}800 & 95.3\% \\
+Residual            &  3{,}772{,}300 &  4.7\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The $4.7\%$ residual is not mysterious either. Reading
+\texttt{ChipCalculateArea} in \texttt{Chip.cpp}, nine statements add to the
+area accumulator, and several of them --- the global H-tree or bus, the global
+buffer, pooling, global accumulation, ReLU and sigmoid --- have no
+corresponding print. Name it ``global buffer, interconnect and activation
+units'' and move on.
+
+\begin{keybox}{What this changes}
+\textbf{The ADC is not the largest area term.} At 19.2\% it sits third, behind
+the array at 26.3\% and accumulation at 20.2\%. Our own tile-level model puts
+the ADC at 55\%, and both can be true: the tile-level figure excludes
+interconnect, global buffer and pooling, so it is a percentage of a much
+smaller denominator. \textbf{Always state which denominator is being used.}
+Putting 55\% and 19.2\% in the same table without that qualification is the
+kind of thing a reviewer catches.
+
+An area \emph{improvement} can now be argued properly, because the breakdown
+closes: run the baseline and proposed configurations and difference them
+component by component, with \texttt{neurosim\_area\_breakdown.py --log A
+--log B}. Attribute any saving to the component that moved. If the total falls
+while the array stays fixed, the saving came from the converters, and that is
+a different claim from a density claim.
+\end{keybox}
 
 \begin{warnbox}{Two caveats on this comparison}
 \textbf{One.} NeuroSim runs VGG-8; we run ResNet-18. This is not like-for-like

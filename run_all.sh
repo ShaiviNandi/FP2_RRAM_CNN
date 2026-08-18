@@ -226,7 +226,7 @@ stage_cifar100() {
 }
 
 # -----------------------------------------------------------------------------
-# NeuroSim at THIS device's parameters. It ships with on/off ratio 10; ours is
+# NeuroSim at this device's parameters. It ships with on/off ratio 10 against
 # 403 (218587.2 / 542.8), and that ratio governs how much a nominally-off cell
 # leaks into the bitline -- the single most likely source of disagreement
 # between the two models. The sed patterns are verified against the file before

@@ -47,7 +47,7 @@ import sys
 
 import column_mac_test as col
 
-# FP2-E1M0 magnitude set this project quantizes weights to.
+# FP2-E1M0 magnitude set.
 FP2_LEVELS = [-1.0, -0.5, 0.0, 0.5, 1.0]
 
 

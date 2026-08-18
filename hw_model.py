@@ -94,11 +94,37 @@ ASSUMPTIONS = {
     "ARRAY_PERIPHERY_OVERHEAD": 1.4,
 
     # ---- ADC (per column, time-multiplexed across COLS_PER_ADC columns) ----
-    "ADC_BITS": 8.0,
+    # 6, not 8: measured requirement on the full test set, flat in B.
+    # An earlier default of 8 meant a bare run silently used the wrong
+    # resolution unless --adc-bits was passed.
+    "ADC_BITS": 6.0,
     # Walden-style figure of merit: energy per conversion = FOM * 2^bits.
-    # 5-50 fJ/conv-step spans most published SAR ADCs; 20 is mid-range.
+    #
+    # BRACKETED BY CITED SILICON rather than asserted:
+    #   H.-Y. Tai et al., "A 0.85fJ/conversion-step 10b 200kS/s Subranging
+    #     SAR ADC in 40nm CMOS", ISSCC 2014, session 11.2.
+    #     -> 0.85 fJ/conv-step, but at only 200 kS/s.
+    #   "A 65nm CMOS 1.2V 12b 30MS/s ADC with capacitive reference scaling"
+    #     -> 0.41 pJ = 410 fJ/conv-step at 30 MS/s, 12 bits, 18 mW.
+    #
+    # This design needs ~83 MS/s (12 ns conversion) at 6 bits. Figure of merit
+    # degrades with both speed and resolution, so a mid-speed 6-bit SAR sitting
+    # between a 200 kS/s SAR and a 12-bit pipeline is defensible. 20 fJ is kept
+    # for that reason, now with the bracket stated instead of "mid-range".
     "ADC_FOM_FJ_PER_CONV_STEP": 20.0,
-    "ADC_AREA_MM2": 0.005,        # ~8-bit SAR at 65nm, order of magnitude
+
+    # Area is the LESS well supported of the two, and in the OPTIMISTIC
+    # direction. Tai's 10-bit core is 0.0065 mm2 at 40 nm, which scales to
+    # 0.0172 mm2 at 65 nm by (65/40)^2 -- 3.4x LARGER than assumed here. A
+    # 6-bit converter needs roughly 1/16 the capacitor array, which would put
+    # it near 0.0011 mm2 and make 0.005 conservative instead. The honest
+    # position is that the answer depends on how 10-bit area is scaled down to
+    # 6-bit, so both bounds should be reported rather than one picked.
+    #   pessimistic (Tai scaled to 65nm, no bit scaling): 0.0172
+    #   optimistic  (Tai scaled, full 2^(6-10) capacitor scaling): 0.0011
+    "ADC_AREA_MM2": 0.005,
+    "ADC_AREA_MM2_PESSIMISTIC": 0.0172,
+    "ADC_AREA_MM2_OPTIMISTIC": 0.0011,
     "ADC_CLK_MHZ": 500.0,         # SAR internal clock; conversion takes ADC_BITS cycles
     "COLS_PER_ADC": 8.0,          # column mux ratio -> ADC area amortization
 
@@ -404,20 +430,19 @@ def rollup(layers, power_by_layer, tile_m, tile_k, verbose=True,
             # Fall back to a modelled array power from the same average-
             # conductance approximation the delay model uses. Flagged, so the
             # report can say how much of the total rests on measurement.
-            # Empirical fallback, calibrated against this project's own ngspice
-            # sweep. The previous closed form assumed every cell sat at its
-            # nominal conductance with a full V_read across it, and came out
-            # 30x above the measured 85.8 uW for a 32x16 tile at 41%
-            # utilisation. Three reasons it was wrong: in 2T2R only the
-            # magnitude side of a nonzero weight leaves HRS, half of those sit
-            # at R_MID rather than R_LRS, and post-ReLU activations are sparse
-            # and well below full scale, so the mean squared wordline voltage
-            # is a small fraction of V_read^2.
+            # Empirical fallback anchored to the ngspice sweep: 85.8 uW for a
+            # 32x16 tile at 41% utilisation, scaled by cell count and
+            # utilisation.
             #
-            # Scaling the measured point by cell count and utilisation is
-            # crude, but it is anchored to simulation instead of to an
-            # assumption, and it is only ever a fallback: pass --power-csv and
-            # this branch is not taken.
+            # A closed form assuming every cell at nominal conductance with
+            # full V_read across it overestimates this by 30x, for three
+            # reasons: in 2T2R only the magnitude side of a nonzero weight
+            # leaves HRS, half of those sit at R_MID rather than R_LRS, and
+            # post-ReLU activations are sparse and well below full scale, so
+            # mean squared wordline voltage is a small fraction of V_read^2.
+            #
+            # Linear scaling is crude but anchored to simulation. Passing
+            # --power-csv bypasses this branch entirely.
             ref_uw_per_cellpair = (ASSUMPTIONS["ARRAY_REF_UW_PER_TILE"]
                                    / ASSUMPTIONS["ARRAY_REF_CELLS"])
             p_arr = (ref_uw_per_cellpair * 1e-6 * tile_m * tile_k

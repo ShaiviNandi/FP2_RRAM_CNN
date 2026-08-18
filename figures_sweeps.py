@@ -74,10 +74,9 @@ def fig_variability(rows, outdir):
     error is the loading gain, which variability barely touches), while
     calibrated accuracy holds within ~1 pt out to sigma=20%.
 
-    Error bars are +/-1 SD over the seeds recorded in the CSV. An earlier
-    version of this figure claimed tall tiles were MORE tolerant; that was
-    sampling noise at n=1000 with 3 seeds and has been retracted, which is
-    exactly what the error bars now make visible."""
+    Error bars are +/-1 SD over the seeds recorded in the CSV. They are not
+    decoration: a tall-tile tolerance trend visible at n=1000 with 3 seeds is
+    within one SD and does not survive the full test set."""
     if not rows:
         return False
     blocks = sorted({int(r["block_size"]) for r in rows})
@@ -350,9 +349,8 @@ def table_variability(rows, outdir):
     blocks = sorted({int(r["block_size"]) for r in rows})
     sigmas = sorted({r["sigma"] for r in rows})
     smax = max(sigmas)
-    # Derive the caption's claim from the data instead of asserting it, which
-    # is how the retracted "taller tiles are more tolerant" line survived a
-    # change of sign in the underlying numbers.
+    # Derived from the data rather than asserted: a hardcoded caption survives
+    # a change of sign in the numbers beneath it.
     worst = 0.0
     for b in blocks:
         z = next((x for x in rows if int(x["block_size"]) == b

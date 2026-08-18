@@ -3,7 +3,7 @@
 # run_blocking.sh -- the "before submission" runbook.
 #
 # Every item from TODO.md sections A (blocking) and B (important) that can be
-# executed. A1 (novelty search) is yours and is not here.
+# executed. A1 (novelty search) is manual and is not included.
 #
 #   bash run_blocking.sh            list the stages
 #   bash run_blocking.sh a2         run one stage
@@ -27,18 +27,21 @@ mkdir -p logs "$FIGDIR"
 # sed -u keeps the pipe unbuffered; without it output appears only at the end
 if echo x | sed -u 's/x/x/' >/dev/null 2>&1; then SED_U="sed -u"; else SED_U="sed"; fi
 
+LOGDIR="$(cd "$(dirname "$0")" && pwd)/logs"
+
 run() {                       # run <stage> <description> <command...>
   local tag="$1" desc="$2"; shift 2
+  mkdir -p "$LOGDIR"
   echo
   echo "==============================================================="
   echo ">>> $tag : $desc"
   echo ">>> $*"
   echo "==============================================================="
   local t0=$SECONDS
-  PYTHONUNBUFFERED=1 "$@" 2>&1 | $SED_U 's/^/   | /' | tee "logs/$tag.log"
+  PYTHONUNBUFFERED=1 "$@" 2>&1 | $SED_U 's/^/   | /' | tee "$LOGDIR/$tag.log"
   local rc=${PIPESTATUS[0]} dt=$((SECONDS - t0))
   if [ "$rc" -ne 0 ]; then
-    echo "!!! $tag FAILED (exit $rc) after ${dt}s -- see logs/$tag.log"
+    echo "!!! $tag FAILED (exit $rc) after ${dt}s -- see $LOGDIR/$tag.log"
     FAILED="${FAILED:-} $tag"
   else
     echo "<<< $tag done in ${dt}s"
@@ -170,7 +173,7 @@ stage_b2() {
 stage_b4() {
   echo
   echo ">>> b4 : level-mapping error"
-  PYTHONUNBUFFERED=1 python3 - 2>&1 | $SED_U 's/^/   | /' | tee logs/b4_levelmap.log <<'PY'
+  PYTHONUNBUFFERED=1 python3 - <<'PYEOF' 2>&1 | $SED_U 's/^/   | /' | tee "$LOGDIR/b4_levelmap.log"
 import analog_eval as ae
 R_L, R_M, R_H = ae.R_LRS, ae.R_MID, ae.R_HRS
 G_L, G_M, G_H = 1/R_L, 1/R_M, 1/R_H
@@ -204,7 +207,26 @@ assert abs(chk - 0.5) < 1e-12, chk
 print(f"        verified: trimmed level 0.5 lands at {chk:.12f}")
 print("Fix B: fold the measured ratio into the block scale -- zero hardware cost,")
 print("       and it also absorbs any per-chip trim error.")
-PY
+PYEOF
+}
+
+# -----------------------------------------------------------------------------
+# B5  Wire parasitics: wordline metal, wordline driver, bitline metal.
+#     The per-column constant models R_SENSE only. Everything else in the
+#     interconnect is currently an ideal wire. Solves the full 2-D mesh and
+#     reports how much of each effect the existing calibration removes.
+# -----------------------------------------------------------------------------
+stage_b5() {
+  run b5_selftest "wordline mesh solver self-test" \
+    python3 wordline_ir.py --self-test
+
+  run b5_breakdown "interconnect parasitics, isolated one at a time" \
+    python3 wordline_ir.py --breakdown --tile-m 128 --tile-k 16 \
+      --out-csv wire_parasitics.csv
+
+  run b5_scaling "wire parasitics vs tile height" \
+    python3 wordline_ir.py --sweep-m 32,64,128,256 \
+      --r-wl 0.5 --r-drv 50 --r-bl 0.5 --out-csv wordline_vs_m.csv
 }
 
 # -----------------------------------------------------------------------------
@@ -214,25 +236,95 @@ PY
 #     is why TOPS/W barely moved (29.3 -> 30.3) after the "conversion".
 # -----------------------------------------------------------------------------
 stage_b6() {
-  local NS="${NEUROSIM_DIR:-../DNN_NeuroSim_V1.4}"
-  if [ ! -d "$NS" ]; then
-    echo "!!! b6 skipped: NeuroSim not found at $NS"
-    echo "    set NEUROSIM_DIR=/path/to/DNN_NeuroSim_V1.4 and re-run"
+  # Search the usual places. A bare "NEUROSIM_DIR=... " on its own shell line
+  # is not exported, so a child bash never sees it; autodetection avoids that
+  # entire class of mistake.
+  local NS=""
+  for cand in "${NEUROSIM_DIR:-}" ../DNN_NeuroSim_V1.4 ~/DNN_NeuroSim_V1.4 \
+              ~/fp2_reram/DNN_NeuroSim_V1.4 /opt/DNN_NeuroSim_V1.4; do
+    [ -n "$cand" ] && [ -d "$cand" ] && { NS="$cand"; break; }
+  done
+  if [ -z "$NS" ]; then
+    echo "!!! b6 skipped: NeuroSim not found in any known location"
+    echo "    run:  NEUROSIM_DIR=/path/to/DNN_NeuroSim_V1.4 bash run_blocking.sh b6"
+    echo "    (prefix on the SAME line -- a separate assignment is not exported)"
     return
   fi
+  echo "   | using NeuroSim at $NS"
   echo
   echo ">>> b6 : verify the C++ device parameters actually took"
   grep -n "resistanceOn\s*=\|resistanceOff\s*=" "$NS"/Inference_pytorch/NeuroSIM/Param.cpp \
     | $SED_U 's/^/   | /'
   echo "   | ^^ both must read 542.8 and 218587.2 with NO trailing multiplier"
 
+  # NeuroSim's inference flow loads a pretrained checkpoint and will not run
+  # without it. The path is relative to Inference_pytorch, so the working
+  # directory matters as much as the file.
+  if [ ! -f "$NS/Inference_pytorch/log/VGG8.pth" ]; then
+    echo "!!! b6 blocked: $NS/Inference_pytorch/log/VGG8.pth is missing."
+    echo "    NeuroSim ships this checkpoint via a download link in its"
+    echo "    Inference_pytorch/README. Fetch it, or train VGG8 first, then"
+    echo "    re-run. Nothing else in b6 can proceed without it."
+    FAILED="${FAILED:-} b6_missing_ckpt"
+    return
+  fi
+  cd "$NS/Inference_pytorch" || return
+
   run b6_neurosim "NeuroSim at on/off ratio 403" \
-    python3 "$NS"/Inference_pytorch/inference.py \
+    python3 inference.py \
       --dataset cifar10 --model VGG8 --mode WAGE \
       --cellBit 2 --subArray 128 --ADCprecision "$ADC_BITS" \
       --onoffratio 403
+  cd - >/dev/null
   echo "   | NOTE: this is VGG8, the reference numbers are ResNet-18 -- NOT like-for-like."
   echo "   | Label it as such in the paper or port ResNet-18 into NeuroSim."
+}
+
+# -----------------------------------------------------------------------------
+# B7  Replace the two weakest assumptions with sourced numbers, and report all
+#     variants side by side rather than picking the flattering one.
+#     ADC and cell area are the constants that dominate area and energy, and
+#     both are currently round placeholders.
+# -----------------------------------------------------------------------------
+stage_b7() {
+  echo
+  echo ">>> b7 : assumption sourcing -- ADC and cell area"
+  echo "   | Three variants of each. Report all three; the spread IS the"
+  echo "   | uncertainty, and hiding it behind one number is the problem."
+
+  run b7_default "baseline placeholders (current)" \
+    python3 hw_model.py --layers-csv bench_b128.csv --tile-m 128 \
+      --adc-bits "$ADC_BITS" --power-csv "$POWER_CSV" \
+      --report hw_adc_default.json
+
+  # NeuroSim sizes the ADC from transistor-level models; its area estimate is
+  # better grounded than a round 0.005 mm2. Values below are placeholders to
+  # be replaced with what b6 actually prints.
+  run b7_neurosim "NeuroSim-sourced ADC and cell area" \
+    python3 hw_model.py --layers-csv bench_b128.csv --tile-m 128 \
+      --adc-bits "$ADC_BITS" --power-csv "$POWER_CSV" \
+      --set ADC_AREA_MM2="${NS_ADC_AREA_MM2:-0.0012}" \
+      --set CELL_AREA_F2="${NS_CELL_F2:-40}" \
+      --report hw_adc_neurosim.json
+
+  # A published, silicon-measured 65 nm SAR ADC. Substitute the FoM and area
+  # from whichever paper gets cited, then cite it in the table caption.
+  run b7_published "published 65nm SAR ADC" \
+    python3 hw_model.py --layers-csv bench_b128.csv --tile-m 128 \
+      --adc-bits "$ADC_BITS" --power-csv "$POWER_CSV" \
+      --set ADC_FOM_FJ_PER_CONV_STEP="${SAR_FOM:-9.5}" \
+      --set ADC_AREA_MM2="${SAR_AREA_MM2:-0.0028}" \
+      --report hw_adc_published.json
+
+  echo
+  echo ">>> b7 : weight-reuse curve (fixes the reuse=1 criticism)"
+  run b7_reuse "weight-fetch advantage vs reuse" \
+    python3 codesign_sweep.py --baseline-only \
+      --reuse-sweep 1,2,5,10,50,100,1000
+
+  echo
+  echo "   | Override the sourced values on the command line, e.g."
+  echo "   |   SAR_FOM=9.5 SAR_AREA_MM2=0.0028 bash run_blocking.sh b7"
 }
 
 # -----------------------------------------------------------------------------
@@ -246,15 +338,17 @@ Stages:
   b2   Drift vs tile height, R_sense sweep           ~4 h      important
   b3   Drift exponent spread sweep                   ~3 h      important
   b4   Level-mapping error (analysis only)           instant   important
+  b5   Wire parasitics: wordline + bitline IR       ~5 min    important
   b6   NeuroSim at the correct on/off ratio          ~30 min   important
+  b7   Source ADC + cell area; reuse curve           ~2 min    important
 
 Groups:
   blocking   = a2 a3 a4
-  important  = b4 b1 b3 b2 b6      (cheapest first)
+  important  = b4 b5 b1 b3 b2 b6   (cheapest first)
   all        = blocking + important
 
 Not scriptable:
-  a1   Novelty search  -- yours. Search these three phrases:
+  a1   Novelty search  -- manual. Search these three phrases:
          "IR drop compensation ReRAM crossbar"
          "conductance-dependent output scaling CIM"
          "sneak-path calibration in-memory computing"
@@ -276,11 +370,13 @@ case "${1:-}" in
   b2) stage_b2 ;;
   b3) stage_b3 ;;
   b4) stage_b4 ;;
+  b5) stage_b5 ;;
+  b7) stage_b7 ;;
   b6) stage_b6 ;;
   blocking)  stage_a2; stage_a3; stage_a4 ;;
-  important) stage_b4; stage_b1; stage_b3; stage_b2; stage_b6 ;;
+  important) stage_b4; stage_b5; stage_b1; stage_b3; stage_b2; stage_b6; stage_b7 ;;
   all)       stage_a2; stage_a3; stage_a4
-             stage_b4; stage_b1; stage_b3; stage_b2; stage_b6 ;;
+             stage_b4; stage_b5; stage_b1; stage_b3; stage_b2; stage_b6; stage_b7 ;;
   *) usage; exit 0 ;;
 esac
 
