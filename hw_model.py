@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
 hw_model.py
-================================================================================
 Analytical AREA / POWER / DELAY model for the FP2-E1M0 2T2R ReRAM crossbar
 accelerator, with every assumption exposed as a named, overridable constant.
 
-READ THIS BEFORE QUOTING ANY NUMBER THIS PRODUCES
--------------------------------------------------
+Read this before quoting any number this produces:
 The numbers below come from three different epistemic tiers, and the report
 labels each one so they never get conflated:
 
@@ -21,7 +19,7 @@ labels each one so they never get conflated:
   [ASSUM] A literature-typical value for a technology this script has no
           access to. Cell area in F^2, ADC area and figure-of-merit, wire
           capacitance. These are placeholders of the right order of
-          magnitude, NOT measurements, and NOT PDK-specific.
+          magnitude, not measurements, and not PDK-specific.
           Every one is a module-level constant, overridable from the
           CLI (--set NAME=VALUE) or by editing this file.
 
@@ -29,8 +27,7 @@ An [ASSUM]-derived area number is a sanity check on feasibility, not a tapeout
 estimate. Given a real PDK, replacing TECH_F_NM, CELL_AREA_F2 and the ADC
 constants with measured numbers makes the whole report defensible.
 
-WHY THE ADC DOMINATES (and why that is the real finding here)
--------------------------------------------------------------
+WHY the ADC DOMINATES (and why that is the real finding here)
 In essentially every published analog in-memory-compute macro, the ADC -- not
 the resistive array -- sets area and energy. This model reproduces that, and
 the reason is structural: the array does M*K multiply-accumulates per read for
@@ -42,21 +39,17 @@ tension the SNR analysis already found from the other side -- larger M gives
 better MAC efficiency but worse bitline loading and worse SNR. The two
 constraints meet at a tile size, and --sweep-m finds it.
 
-USAGE
------
+Usage:
     python3 hw_model.py --self-test
 
     # Model the deployed CIFAR ResNet-18 mapping, array power from real ngspice
-    python3 hw_model.py --layers-csv results_cifar_qat_deployed.csv \\
-        --power-csv ngspice_full_summary.csv --adc-bits 8 --report hw_report.json
+    python3 hw_model.py --layers-csv results_cifar_qat_deployed.csv         --power-csv ngspice_full_summary.csv --adc-bits 8 --report hw_report.json
 
     # Where does the tile-size optimum sit?
     python3 hw_model.py --layers-csv results_cifar_qat_deployed.csv --sweep-m
 
     # Override any assumption
-    python3 hw_model.py --layers-csv results_cifar_qat_deployed.csv \\
-        --set TECH_F_NM=28 --set CELL_AREA_F2=25 --set ADC_FOM_FJ_PER_CONV_STEP=10
-================================================================================
+    python3 hw_model.py --layers-csv results_cifar_qat_deployed.csv         --set TECH_F_NM=28 --set CELL_AREA_F2=25 --set ADC_FOM_FJ_PER_CONV_STEP=10
 """
 import argparse
 import json
@@ -113,9 +106,9 @@ ASSUMPTIONS = {
     # for that reason, now with the bracket stated instead of "mid-range".
     "ADC_FOM_FJ_PER_CONV_STEP": 20.0,
 
-    # Area is the LESS well supported of the two, and in the OPTIMISTIC
+    # Area is the less well supported of the two, and in the OPTIMISTIC
     # direction. Tai's 10-bit core is 0.0065 mm2 at 40 nm, which scales to
-    # 0.0172 mm2 at 65 nm by (65/40)^2 -- 3.4x LARGER than assumed here. A
+    # 0.0172 mm2 at 65 nm by (65/40)^2 -- 3.4x larger than assumed here. A
     # 6-bit converter needs roughly 1/16 the capacitor array, which would put
     # it near 0.0011 mm2 and make 0.005 conservative instead. The honest
     # position is that the answer depends on how 10-bit area is scaled down to
@@ -152,7 +145,7 @@ ASSUMPTIONS = {
     # The previous DAC_AREA_MM2 = 0.0004 (400 um^2/row) was a placeholder and
     # a bad one: at M=128 it made the DAC 68% of tile area, larger than the
     # ADC. Both schemes below are built from unit-element counts instead.
-    # DEFAULT IS THE PARALLEL DAC, deliberately: analog_eval's ADC sweep
+    # DEFAULT IS the PARALLEL DAC, deliberately: analog_eval's ADC sweep
     # applied the converter to a full multi-bit activation read, so the
     # measured "6 bits required" figure describes THAT scheme. Bit-serial
     # fires the ADC once per activation bit, so it would need its own sweep
@@ -195,7 +188,7 @@ ASSUMPTIONS = {
     # ---- array read power fallback ---------------------------------------
     # Anchor point from this repo's own exhaustive ngspice sweep
     # (ngspice_full_summary.csv): mean 85.8 uW for a 32x16 tile (512 weight
-    # pairs) at 41% cell utilisation, over a 16 ns read. Used ONLY when
+    # pairs) at 41% cell utilisation, over a 16 ns read. Used only when
     # --power-csv is absent. Replace with a measured mean after re-running
     # the sweep at a different operating point.
     "ARRAY_REF_UW_PER_TILE": 85.8,

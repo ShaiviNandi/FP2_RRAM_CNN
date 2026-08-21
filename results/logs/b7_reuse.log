@@ -1,0 +1,42 @@
+   | 
+   | ==============================================================================
+   | WEIGHT-FETCH TERM vs REUSE  -- the single most contested number
+   | ==============================================================================
+   |      reuse     SRAM fetch pJ/MAC     ReRAM   SRAM total adv.
+   | ------------------------------------------------------------------------------
+   |          1              0.100000       0.0          0.100000
+   |          2              0.050000       0.0          0.050000
+   |          5              0.020000       0.0          0.020000
+   |         10              0.010000       0.0          0.010000
+   |         50              0.002000       0.0          0.002000
+   |        100              0.001000       0.0          0.001000
+   |       1000              0.000100       0.0          0.000100
+   | ------------------------------------------------------------------------------
+   | The fetch advantage falls as 1/reuse. Quoting reuse=1 alone
+   | overstates the in-memory-compute case; quote the curve.
+   | 
+   | 
+   | ==============================================================================
+   | DIGITAL BASELINE -- 2T2R ReRAM vs 6T SRAM, 11,157,504 weights, 65 nm
+   | ==============================================================================
+   | 
+   | WEIGHT STORAGE AREA  [MODEL on ASSUM]
+   |   per weight   ReRAM 2T2R      0.3380 um2
+   |                SRAM  FP2 (2b)  1.1830 um2  -> ReRAM 3.5x denser
+   |   whole net    ReRAM           3.77 mm2
+   |                SRAM  FP2       13.20 mm2
+   |                SRAM  FP32      211.2 mm2  -> ReRAM 56x smaller
+   | 
+   | STANDBY  [MODEL on ASSUM -- leakage varies >10x with corner/temp]
+   |   SRAM holding 2.79 MB of FP2 weights: 2.68 mW, continuously, forever
+   |   ReRAM: 0.0 mW. Retention is a materials property, not a power draw.
+   | 
+   | WEIGHT MOVEMENT  [MODEL]
+   |   at reuse=1x  SRAM fetch 0.1000 pJ/MAC   ReRAM 0 pJ/MAC
+   |   (in-memory compute eliminates this term by construction; it is the whole point)
+   | 
+   | THE COST SIDE -- what ReRAM is bad at  [MODEL on ASSUM]
+   |   programming all 22,315,008 cells once: 2231.5 uJ, 2231.5 ms
+   |   A design that reloads tiles often pays this repeatedly. Any time-multiplexed
+   |   mapping (hw_model --physical-tiles) must amortize it or the comparison is dishonest.
+   | ==============================================================================

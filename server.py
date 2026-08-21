@@ -7,7 +7,7 @@ session, not a reimplementation.
 
 Two execution engines, selectable per-request:
   - "golden": fast, pure-Python nodal-analysis model. No ngspice needed.
-  - "ngspice": generates the REAL dynamic program-then-read netlist and
+  - "ngspice": generates the real dynamic program-then-read netlist and
     runs it through actual ngspice. Slower (real transient simulation),
     but this is actual device physics, not an approximation.
 

@@ -1,0 +1,18 @@
+   | /home/shaiv/.local/lib/python3.12/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+   |   warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+   | variability.csv: found   adc_sweep.csv: found   drift.csv: found
+   | 
+   |   wrote fig8_variability.pdf / .png
+   |   wrote fig9_variability_robustness.pdf / .png
+   |   wrote fig10_adc_resolution.pdf / .png
+   |   wrote fig11_adc_energy_projection.pdf / .png
+   |   wrote tab5_variability.tex
+   |   wrote tab6_adc.tex
+   |   wrote fig12_drift.pdf / .png
+   |   wrote fig13_drift_cost.pdf / .png
+   |   wrote tab8_drift.tex
+   |   wrote tab7_headline.tex
+   | 
+   | Worst stale-calibration point: B=32, t=1y, 65.17% vs 92.42% ceiling (-27.25 pts). Refresh recovers +26.70.
+   | 
+   | ADC bits required (within 1 pt of exact): {32: 6, 64: 6, 128: 6, 256: 6}

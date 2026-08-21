@@ -4,19 +4,19 @@ N-cell ReRAM crossbar COLUMN MAC validation.
 
 Unlike the earlier 2-cell calibration tests (each cell had its own private
 bitline+resistor, i.e. they never actually summed anything), this builds a
-REAL crossbar column: all N cells share ONE bitline node and ONE sense
+real crossbar column: all N cells share ONE bitline node and ONE sense
 resistor, with each cell's other terminal driven independently. This is
 what makes KCL actually do the accumulate.
 
-WHY THE GOLDEN MODEL ISN'T A NAIVE SUM: because all cells share one finite
+WHY the GOLDEN MODEL ISN'T A NAIVE SUM: because all cells share one finite
 sense resistor (not an ideal virtual-ground TIA), the shared bitline node
 voltage depends on ALL cells simultaneously -- a coupled linear circuit,
 not N independent dividers. This script computes THREE numbers so the
 coupling error introduced by that finite resistor is visible, not hidden:
   1. "target" MAC value: the pure Sum(weight_i * activation_i), scaled by
-     what current that SHOULD produce if the crossbar were ideal (ideal
+     what current that should produce if the crossbar were ideal (ideal
      virtual-ground readout, Rsense -> 0).
-  2. "circuit-exact" current: solved via real nodal analysis for THIS
+  2. "circuit-exact" current: solved via real nodal analysis for this
      circuit's actual finite Rsense -- this is the correct ground truth
      for what ngspice should report, and will differ from (1) by an
      amount that grows with Rsense and with how many/how conductive the
@@ -46,9 +46,7 @@ weight (not stored in the device) -- consistent with the sign-realization
 decision flagged in the session summary document.
 
 Usage:
-    python3 column_mac_test.py --osdi rram_v_1_0_0.osdi \
-        --weights 1.0 -1.0 0.5 -0.5 0.0 1.0 -0.5 0.5 \
-        --activations 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0
+    python3 column_mac_test.py --osdi rram_v_1_0_0.osdi         --weights 1.0 -1.0 0.5 -0.5 0.0 1.0 -0.5 0.5         --activations 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0
 """
 import argparse
 import subprocess
@@ -59,13 +57,13 @@ import shutil
 
 # CRITICAL FIX (2026-07): the RRAM compact model (or its OSDI compilation)
 # has a pathological special case triggered when the driver voltage is held
-# at LITERALLY 0.0V for an extended (multi-timestep) DC-like hold -- NOT
+# at LITERALLY 0.0V for an extended (multi-timestep) DC-like hold -- not
 # present for a driver that merely touches 0V at a single instant during a
 # continuous ramp. Confirmed via a fully isolated single-cell, no-switch
 # test: a driver held at exact 0V before a RESET pulse causes the cell to
 # saturate to near-HRS regardless of pulse width/timing (matching the long-
 # standing "1T1R corrupts intermediate-state programming" symptom from
-# earlier sessions); the SAME pulse preceded by a driver held at ANY
+# earlier sessions); the same pulse preceded by a driver held at any
 # nonzero voltage -- confirmed amplitude-independent from 1e-6V to 1e-3V --
 # avoids the pathology entirely and lands close to the calibrated target.
 # Fix: every idle "0V" hold in the driver PWL uses this tiny epsilon
@@ -172,9 +170,9 @@ def build_column_netlist(osdi_path, weights, activations, r_program, r_sense,
         # slot, and HIGH again during the final read (all rows reconnect
         # for simultaneous parallel read); LOW (isolated) everywhere else.
         #
-        # CRITICAL: the switch must NEVER be electrically open at exactly
+        # CRITICAL: the switch must never be electrically open at exactly
         # t=0. Root-caused 2026-07: ngspice computes an initial transient
-        # operating-point solve at t=0 BEFORE any PWL source starts moving;
+        # operating-point solve at t=0 before any PWL source starts moving;
         # if the switch is open at that instant, the RRAM device's internal
         # state gets initialized from a near-floating DC condition instead
         # of a normal closed-circuit one, and the compact model never
@@ -188,7 +186,7 @@ def build_column_netlist(osdi_path, weights, activations, r_program, r_sense,
         # or pulse calibration. Fix: every row's switch starts CLOSED at
         # t=0, and only opens (if isolation is needed) shortly afterward --
         # at t=0.02ns, still well before the earliest possible pulse onset
-        # at t=0.05ns on ANY row, so isolation is still fully intact by the
+        # at t=0.05ns on any row, so isolation is still fully intact by the
         # time any real programming voltage appears.
         sel_points = [(0, v_sel_on)]
         if slot_start > 0:
@@ -205,14 +203,14 @@ def build_column_netlist(osdi_path, weights, activations, r_program, r_sense,
             sel_points.append((total_program_time, v_sel_off))
             sel_points.append((total_program_time + 0.01, v_sel_on))
         else:
-            # This is the LAST row's program slot -- nothing left to
+            # This is the last row's program slot -- nothing left to
             # isolate from, so just stay closed straight through to the
             # read (no spurious open/close blip right at the boundary).
             sel_points.append((total_program_time, v_sel_on))
         sel_points.append((total_end, v_sel_on))
         sel_pwl = " ".join(f"{t}n {v}" for t, v in sel_points)
 
-        # Reset-pulse PWL that only fires while THIS row's own select switch
+        # Reset-pulse PWL that only fires while this row's own select switch
         # is closed (during its own slot) -- riding on top of the driver.
         # The switch closes at slot_start+0.01ns (see sel_points above); the
         # stimulus then waits `switch_settle_ns` before the RESET pulse actually
@@ -424,7 +422,7 @@ def main():
     # (negative when the source is delivering power to the circuit) -- flip
     # sign here to compare against the golden model's "physical current into
     # the cell" convention. Same fix already applied in column_mac_kcl_only.py;
-    # this script was missing it, which is why the --no-switch run above
+    # this script was missing it, so the --no-switch run above
     # showed ~200% "error" despite matching the golden model almost exactly.
     i_total_sim = -sum(currents_sim)
 

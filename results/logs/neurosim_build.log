@@ -1,0 +1,4 @@
+   | make: Entering directory '/home/shaiv/DNN_NeuroSim_V1.4/Inference_pytorch/NeuroSIM'
+   | g++ -c -fopenmp -O3 -std=c++0x -w	 Param.cpp -o Param.o
+   | g++ -fopenmp -O3 -std=c++0x -w	 Adder.o AdderTree.o BitShifter.o Buffer.o Bus.o Chip.o Comparator.o CurrentSenseAmp.o DFF.o DeMux.o DecoderDriver.o FunctionUnit.o HTree.o LevelShifter.o MaxPooling.o MultilevelSAEncoder.o MultilevelSenseAmp.o Mux.o NewMux.o NewSwitchMatrix.o Param.o Precharger.o ProcessingUnit.o ReadCircuit.o RowDecoder.o SRAMWriteDriver.o SarADC.o SenseAmp.o ShiftAdd.o Sigmoid.o SramNewSA.o SubArray.o SwitchMatrix.o Technology.o Tile.o VoltageSenseAmp.o WLDecoderOutput.o WLNewDecoderDriver.o XYBus.o formula.o main.o -o main
+   | make: Leaving directory '/home/shaiv/DNN_NeuroSim_V1.4/Inference_pytorch/NeuroSIM'

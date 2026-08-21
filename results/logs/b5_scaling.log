@@ -1,0 +1,25 @@
+   |   solving M=32 ...
+   |   solving M=64 ...
+   |   solving M=128 ...
+   |   solving M=256 ...
+   | 
+   |  tile height    raw err%   col-calib%    col+row%
+   | -------------------------------------------------
+   |           32      57.712      35.8956     14.0611
+   |           64      70.080      40.6097     17.7312
+   |          128      87.815      55.8750     47.4445
+   |          256      91.563      62.8410     68.6505
+   | -------------------------------------------------
+   | 
+   | INTERPRETATION
+   |   raw err%    mesh solve against ideal, no correction
+   |   col-calib%  the project's per-column constant only
+   |   col+row%    plus a per-row gain FITTED on one activation pattern
+   |               and applied to unseen ones
+   | 
+   |   If col+row is far below col, the wordline error is largely a
+   |   compile-time constant and the contribution survives intact.
+   |   If col+row stays close to col, the residual is activation-
+   |   dependent and the claim must be narrowed to the bitline term.
+   | 
+   | Wrote wordline_vs_m.csv

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 figures_sweeps.py
-================================================================================
 Figures and LaTeX tables for the two sweeps that closed the paper's open
 questions: device variability (7.1) and ADC resolution (7.2).
 
@@ -10,7 +9,6 @@ variability.csv and adc_sweep.csv produced by analog_eval.py.
 
     python3 figures_sweeps.py --self-test
     python3 figures_sweeps.py --outdir paper/figures
-================================================================================
 """
 import argparse
 import csv
@@ -407,7 +405,7 @@ def table_adc(rows, outdir):
         r"\begin{table}[t]", r"\centering",
         r"\caption{ADC resolution against tile height, gain-calibrated, full "
         r"10\,000-image test set. Six bits are required at every $B$ (five "
-        r"costs 1.2--1.6 points). Crucially the requirement is FLAT in $B$: an "
+        r"costs 1.2--1.6 points). The requirement is flat in $B$: an "
         r"$8\times$ taller tile needs no extra resolution, so the ADC energy "
         r"amortised over more rows is not handed back.}",
         r"\label{tab:adc}",

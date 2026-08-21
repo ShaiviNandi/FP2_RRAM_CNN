@@ -7,13 +7,13 @@ column MAC unit in column_mac_test.py / column_mac_kcl_only.py.
 SIGNED WEIGHTS -- WHY DIFFERENTIAL (2T2R) NOW
     The single-cell tests this session got signed weights by flipping the
     READ voltage's polarity per cell. That only works in isolation -- on a
-    real shared wordline, every cell on that row sees the SAME physical
+    real shared wordline, every cell on that row sees the same physical
     voltage at the same instant, so +V cannot be applied to one cell and -V
     to its neighbor. Real signed crossbars (and this project's own name,
     EvoCIM-2T2R) use a differential pair per weight instead: R+ and R-.
     Whichever side represents the sign gets the calibrated magnitude
     resistance; the OTHER side is driven fully HRS ("off", magnitude 0).
-    Reading BOTH bitline currents and subtracting (I+ - I-) reproduces the
+    Reading both bitline currents and subtracting (I+ - I-) reproduces the
     signed weighted sum using only one shared positive read voltage per
     row -- exactly as a real 2T2R array works.
 
@@ -22,7 +22,7 @@ DATAFLOW -- WEIGHT-STATIONARY (same two-phase split as this session)
     sequentially program every physical cell using the exact calibrated
     pulse recipe validated in column_mac_test.py (WIDTH_FOR_MAGNITUDE,
     R_FOR_MAGNITUDE, the DRIVER_IDLE_V epsilon fix, switch-closed-at-t=0).
-    THIS FILE DOES NOT YET GENERATE THAT DYNAMIC PROGRAMMING NETLIST for
+    this FILE does not YET GENERATE THAT DYNAMIC PROGRAMMING NETLIST for
     the full array -- see the note in build_array_read_netlist() below for
     why, and what the next step looks like.
 
@@ -163,7 +163,7 @@ def ideal_target_currents(W, activations, vread_base=0.1):
 
 # ---------------------------------------------------------------------------
 # Convolution via im2col: reduces conv2d to repeated matmul calls against
-# the SAME programmed weight matrix (weight-stationary reuse).
+# the same programmed weight matrix (weight-stationary reuse).
 # ---------------------------------------------------------------------------
 
 def im2col_patches(input_fmap, kernel_h, kernel_w, stride=1):
@@ -282,7 +282,7 @@ def build_array_program_and_read_netlist(osdi_path, W, activations, r_sense=20.0
         "",
     ]
 
-    # --- Per-row shared driver PWL: idle epsilon except during THIS row's
+    # --- Per-row shared driver PWL: idle epsilon except during this row's
     # own program slots, then a single read pulse at the very end. ---
     for i in range(M):
         pts = [(0, DRIVER_IDLE_V)]
@@ -537,7 +537,7 @@ def build_conv_dynamic_netlist(osdi_path, kernels, input_fmap, stride=1, r_sense
     # --- Per-cell device + select switch: identical logic to
     # build_array_program_and_read_netlist -- closed at t=0, isolates
     # until its own program slot, then stays closed straight through
-    # ALL read windows once programming is done (no reprogramming). ---
+    # all read windows once programming is done (no reprogramming). ---
     for idx, (i, k, pol, width) in enumerate(cell_order):
         slot_start = idx * slot_duration
         slot_end = slot_start + slot_duration

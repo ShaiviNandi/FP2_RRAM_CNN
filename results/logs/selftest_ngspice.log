@@ -1,0 +1,19 @@
+   | === ngspice_full_sweep self-test ===
+   | 
+   | [1] Batched netlist == unbatched netlist == nodal model
+   |     batched vs UNBATCHED ngspice : worst 0.000e+00 %
+   |     batched vs nodal golden model: worst 6.422e-07 %
+   | 
+   | [2] Degenerate tiles (all-zero weights, zero activations)
+   |     all-zero weight tile: max abs current diff 0.000e+00 A (both bitlines sit at the same HRS-divided potential)
+   |     zero-activation tile: max |v_blp| 0.000e+00 V (no drive => no current)
+   | 
+   | [3] Power sanity
+   |     mean 200.321 uW   max 337.204 uW   loose upper bound 2210.759 uW
+   | 
+   | [4] Timing model for the full run
+   |     one 12x5 tile x 4 positions: 12.7 ms
+   | 
+   | ============================================================
+   | SELF-TEST PASSED
+   | ============================================================

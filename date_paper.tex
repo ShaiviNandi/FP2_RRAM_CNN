@@ -754,13 +754,19 @@ viable. The write figure is consistent with measured multilevel programming:
 one $1.2$\,V, $1\,\mu$s pulse at a compliance of $10$--$40\,\mu$A costs
 $12$--$48$\,pJ~\cite{perez2021}, and write-verify applies several.
 
-\emph{Area denominators.} Tile-level and chip-level shares are not
-interchangeable. The 55.2\% ADC share quoted here is of tile area --- array,
-converters, input drive and partial-sum accumulation. The independent tool
-reports 19.2\% of \emph{chip} area for the same block, the difference being
-interconnect, global buffer and pooling, which the tile-level denominator
-excludes. Its full breakdown accounts for 95.3\% of chip area, the 4.7\%
-residual being global blocks it does not print separately.
+\emph{Area accounting.} Two cautions. First, tile-level and chip-level shares
+are not interchangeable: the 55.2\% ADC share quoted here is of tile area,
+against 2.0\% of chip area for the same block in the independent tool, the
+difference being interconnect, global buffer and pooling. Second, that tool's
+chip total responds to floorplan geometry rather than to component sizes alone:
+holding all else fixed and widening the 1T1R cell four-fold \emph{reduces} the
+reported chip total from 120.4 to 62.4\,mm², while every named component grows
+or is unchanged. Instrumenting the tool shows 65.6\% of chip area lies inside
+per-tile bounding boxes without appearing in any component sum --- the arrays
+at 2-bit weights are too small to fill the tile footprint --- and that the
+global blocks account for only 7.7 of the 86.7\,mm² unattributed. All area figures reported here are
+therefore sums of named components, which scale as expected, and never chip
+totals.
 
 \emph{Level mapping.} $R_{\mathrm{MID}}/R_{\mathrm{LRS}}{=}2.0262$ rather than
 exactly 2, and finite HRS leakage shifts every level, placing level $0.5$ at

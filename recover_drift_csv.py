@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 recover_drift_csv.py
-================================================================================
 Rebuild drift.csv from logs/drift.log.
 
 The drift sweep completed but the summary printer crashed before the CSV was

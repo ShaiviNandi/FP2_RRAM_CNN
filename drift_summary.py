@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 """
 drift_summary.py
-================================================================================
 Summarises the b2 (R_sense) and b3 (drift-exponent spread) sweeps into the two
 tables the paper needs.
 
 Both sweeps write the schema produced by analog_eval.drift_sweep:
     block_size, t_seconds, t_label, acc_ideal, raw, stale, recalib
-The cost columns are derived here rather than stored, which is why an earlier
+The cost columns are derived here rather than stored. An earlier
 summariser that expected a `stale_cost` column raised KeyError.
 
     python3 drift_summary.py
 
 Reads drift_nusigma_*.csv and drift_rsense_*.csv from the working directory.
---latex emits both tables ready to \\input{}.
-================================================================================
+--latex emits both tables ready to \input{}.
 """
 import argparse
 import csv

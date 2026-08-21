@@ -1,0 +1,42 @@
+   | === analog_eval self-test ===
+   | 
+   | [1] Vectorised solve == crossbar_array_test.golden_array_matmul
+   |     M=  8 K= 4 P=3: worst relative diff 1.626e-15
+   |     M= 32 K=16 P=5: worst relative diff 4.386e-14
+   |     M= 17 K= 7 P=2: worst relative diff 4.386e-14
+   |     M= 64 K= 8 P=4: worst relative diff 4.386e-14
+   |     machine-precision agreement: True
+   | 
+   | [1b] Gain calibration recovers the ideal MAC exactly
+   |     M=  32: raw error  26.71%  (readout retains  73.7% of ideal magnitude)   after calibration 2.98e-14%
+   |     M= 128: raw error  58.90%  (readout retains  41.1% of ideal magnitude)   after calibration 4.18e-14%
+   |     M= 256: raw error  73.91%  (readout retains  26.1% of ideal magnitude)   after calibration 6.99e-14%
+   |     calibration is exact to machine precision: True
+   |     attenuation worsens with column height, as the 1/(1+Rs*G) term predicts
+   | 
+   | [2] Degenerate tiles
+   |     all-zero weights -> max |I| = 0.000e+00 A (must be ~0)
+   |     zero activations -> max |I| = 0.000e+00 A (must be 0)
+   | 
+   | [3] Resistance mapping matches decompose_differential
+   |     w=-1.0: Rp  218587.2 (ref  218587.2)  Rn     542.8 (ref     542.8)
+   |     w=-0.5: Rp  218587.2 (ref  218587.2)  Rn    1099.8 (ref    1099.8)
+   |     w=+0.0: Rp  218587.2 (ref  218587.2)  Rn  218587.2 (ref  218587.2)
+   |     w=+0.5: Rp    1099.8 (ref    1099.8)  Rn  218587.2 (ref  218587.2)
+   |     w=+1.0: Rp     542.8 (ref     542.8)  Rn  218587.2 (ref  218587.2)
+   | 
+   | [4] Block quantization partitions like weight_scale_factor
+   |     M=100 block=32 -> scale shape (4, 6) (expect (4, 6))
+   |     unique levels: [-1.0, -0.5, -0.0, 0.5, 1.0]
+   |     max |w/scale| in full blocks = 0.996622 (must be <= 1)
+   | 
+   | [5] AnalogConv2d reproduces a hand-tiled reference
+   |     output shape (2, 6, 5, 5) (expect (2, 6, 5, 5))
+   | /home/shaiv/fp2_reram/python/analog_eval.py:671: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+   | Consider using tensor.detach() first. (Triggered internally at /__w/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:822.)
+   |   rel = float((y - y_fp32).abs().sum() / y_fp32.abs().sum())
+   |     relative difference vs exact FP32 conv: 31.46% (nonzero => the crossbar is actually in the path)
+   | 
+   | ============================================================
+   | SELF-TEST PASSED
+   | ============================================================

@@ -1,0 +1,54 @@
+   | Loaded ngspice-measured array power for 19 layers.
+   |   NOTE: ngspice_full_sweep defaults to --tile-m 32. If that CSV was produced at a different tile height than the --tile-m 128 requested here, the array term is off by the cell-count ratio (4x). Re-run the sweep with --tile-m 128 to remove the caveat.
+   | 
+   | ============================================================================================
+   | FP2-E1M0 2T2R ReRAM ACCELERATOR -- AREA / POWER / DELAY
+   | tile 128x16   node 65 nm   ADC 6 bit   Rsense 20 ohm   Vread 0.10 V
+   | ============================================================================================
+   | 
+   | Layer                     tiles   util%  t_tile(ns)     E(nJ)    fJ/MAC   ADC%E  P_arr(uW)  src
+   | --------------------------------------------------------------------------------------------
+   | layer1.0.conv1               20    24.9       12.00      1.00      24.5    81.7     163.26  SIM
+   | layer1.0.conv2               20    27.4       12.00      1.00      24.4    81.9     156.20  SIM
+   | layer1.1.conv1               20    28.0       12.00      1.07      26.2    76.4     455.26  SIM
+   | layer1.1.conv2               20    29.0       12.00      0.99      24.1    82.9     103.35  SIM
+   | layer2.0.conv1               40    30.5       12.00      2.13      26.0    76.9     425.86  SIM
+   | layer2.0.conv2               72    31.1       12.00      3.57      24.2    82.7     115.93  SIM
+   | layer2.0.downsample.0         8    36.9       12.00      0.41      25.3    79.2     298.42  SIM
+   | layer2.1.conv1               72    32.1       12.00      3.74      25.3    78.9     312.35  SIM
+   | layer2.1.conv2               72    32.7       12.00      3.52      23.9    83.7      63.70  SIM
+   | layer3.0.conv1              144    28.9       12.00      7.66      26.0    77.0     418.96  SIM
+   | layer3.0.conv2              288    29.8       12.00     14.14      24.0    83.4      76.95  SIM
+   | layer3.0.downsample.0        16    28.1       12.00      0.84      25.7    77.9     367.72  SIM
+   | layer3.1.conv1              288    30.8       12.00     14.29      24.2    82.6     121.32  SIM
+   | layer3.1.conv2              288    34.4       12.00     14.00      23.7    84.3      37.14  SIM
+   | layer4.0.conv1              576    28.6       12.00     29.50      25.0    80.0     255.22  SIM
+   | layer4.0.conv2             1152    29.8       12.00     57.04      24.2    82.7     113.01  SIM
+   | layer4.0.downsample.0        64    34.1       12.00      3.33      25.4    78.7     324.30  SIM
+   | layer4.1.conv1             1152    30.1       12.00     59.55      25.2    79.2     294.54  SIM
+   | layer4.1.conv2             1152    34.9       12.00     56.58      24.0    83.4      79.41  SIM
+   | --------------------------------------------------------------------------------------------
+   | 
+   | DELAY   [MODEL]
+   |   bitline R_eff 8.15 ohm   C_bl 25.60 fF   tau 1.03 ps
+   |   settling 0.004 ns (0.0% of tile time)   ADC 12.000 ns
+   |   tile read 12.004 ns  ->  0.341 TOPS per tile
+   |   whole-network latency (K-tiles parallel, M-tiles serial): 2.94 us
+   | 
+   | AREA    [MODEL on ASSUM]
+   |   per tile: array 969 um2 (1.6%)   ADC 4800 um2 (8.0%)   DAC 51200 um2   psum 3200 um2
+   |   4096 ReRAM cells/tile, 4.0 ADC/tile (mux 8:1)
+   |   5464 tiles, all weights resident (fully weight-stationary) -> 328.764 mm2
+   |   A 329 mm2 die is not manufacturable at sane cost. Re-run with --physical-tiles to time-multiplex, or raise --tile-m.
+   | 
+   | ENERGY  [SIM array + MODEL periphery]
+   |   source: 19/19 layers with ngspice-measured array power
+   |   total 274.4 nJ for 11,157,504 MACs = 0.0246 pJ/MAC
+   |   ADC is 80.7% of energy on average
+   | 
+   | EFFICIENCY
+   |   7.59 TOPS   81.3 TOPS/W   0.02 TOPS/mm2
+   | ============================================================================================
+   | [SIM] measured by ngspice. [MODEL] closed form. [ASSUM] literature-typical placeholder -- replace with PDK data before publishing. Area and delay rest on [ASSUM]; the array power term does not.
+   | 
+   | Wrote hw_adc_neurosim.json

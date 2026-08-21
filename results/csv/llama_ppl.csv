@@ -1,0 +1,6 @@
+model,block_size,adc_bits,sigma,drift_s,mode,crossbar_weights_M,perplexity
+JackFram/llama-160m,128,6,0.0,0.0,fp32,0.0,28.019819508422025
+JackFram/llama-160m,128,6,0.0,0.0,rtn,113.25,520239.9152365118
+JackFram/llama-160m,128,6,0.0,0.0,ideal,113.25,445867.3268738834
+JackFram/llama-160m,128,6,0.0,0.0,analog,113.25,624382.0277534856
+JackFram/llama-160m,128,6,0.0,0.0,corrected,113.25,484285.9687535731

@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
 wordline_ir.py
-================================================================================
 Quantifies wordline IR drop and tests whether it can be calibrated away.
 
-WHY THIS EXPERIMENT DECIDES SOMETHING
--------------------------------------
+Why this experiment decides something:
 The bitline loading error is
         I_act = I_ideal / (1 + Rs * G_col)
 and the denominator contains no activation term, so it is a compile-time
@@ -24,8 +22,7 @@ to
 That is the single most likely way this work gets weakened, so it is measured
 here rather than argued about.
 
-WHAT IS SOLVED
---------------
+What is solved:
 The full 2-D resistive mesh, with no approximation beyond lumping the wire
 into per-segment resistors:
 
@@ -43,8 +40,7 @@ Setting R_WL = R_DRV = R_BL = 0 must reproduce the shared-Rsense formula the
 rest of the project uses; --self-test asserts exactly that, which is what makes
 this script trustworthy as a check on the main model.
 
-USAGE
------
+Usage:
     python3 wordline_ir.py --self-test
 
     # how big is the effect, and does a per-row constant remove it?
@@ -57,7 +53,6 @@ Typical 65 nm intermediate-metal values: sheet resistance ~0.1 ohm/square,
 a cell pitch of a few squares, so R_WL is order 0.1-1 ohm per cell pitch.
 R_DRV for a wordline driver is order 10-100 ohm. Both are swept rather than
 asserted, because neither is known here without a PDK.
-================================================================================
 """
 import argparse
 import sys

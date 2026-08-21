@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 benchmark_resnet18.py
-================================================================================
 Layer-by-layer benchmarking harness for the FP2-E1M0 / 2T2R ReRAM crossbar
 accelerator running ResNet-18 inference. Compares four fidelity levels:
 
@@ -22,7 +21,7 @@ accelerator running ResNet-18 inference. Compares four fidelity levels:
 For each Conv2d layer in the model, a calibration forward pass captures the
 input-activation statistics via forward hooks + `F.unfold` (im2col), so the
 crossbar error numbers reflect what that layer actually sees in inference.
-Pass --calib-dataset cifar10 (or imagefolder) to drive that pass with REAL
+Pass --calib-dataset cifar10 (or imagefolder) to drive that pass with real
 IMAGES. The default, --calib-dataset random, drives it with Gaussian noise
 and is retained only to reproduce earlier runs; it warns, and its numbers
 should not be reported -- see build_calibration_batch() for why.
@@ -32,8 +31,7 @@ through the resistive-divider model is unnecessary for a fidelity benchmark
 (and expensive), a random subset of `--max-positions` output pixels per
 layer is sampled -- controlled and reproducible via `--seed`.
 
-USAGE
------
+Usage:
     # Pipeline smoke test with random weights/activations (no torch needed
     # beyond quantization math -- use --synthetic if torch/torchvision are
     # not installed in this environment):
@@ -42,19 +40,15 @@ USAGE
     # Real ResNet-18 (random-init, since no internet access to fetch
     # pretrained weights in this environment -- point --checkpoint at a
     # local .pth file for a trained model):
-    python3 benchmark_resnet18.py --checkpoint my_resnet18.pth \\
-        --max-positions 64 --r-sense 20.0 --vread 0.1 --seeds 5
+    python3 benchmark_resnet18.py --checkpoint my_resnet18.pth         --max-positions 64 --r-sense 20.0 --vread 0.1 --seeds 5
 
     # Include RTL simulation diff (expects a JSON dump keyed by layer name,
     # see `parse_rtl_log` docstring for the expected format):
-    python3 benchmark_resnet18.py --checkpoint my_resnet18.pth \\
-        --rtl-log rtl_psum_dump.json
+    python3 benchmark_resnet18.py --checkpoint my_resnet18.pth         --rtl-log rtl_psum_dump.json
 
     # Include end-to-end Top-1 accuracy drop on a local image folder
     # (torchvision ImageFolder layout):
-    python3 benchmark_resnet18.py --checkpoint my_resnet18.pth \\
-        --eval-dir /path/to/val_subset --max-eval-images 200
-================================================================================
+    python3 benchmark_resnet18.py --checkpoint my_resnet18.pth         --eval-dir /path/to/val_subset --max-eval-images 200
 """
 import argparse
 import json
@@ -311,7 +305,7 @@ def extract_conv_layers(model, args) -> list:
         pad = mod.padding[0]
 
         # [N, Cin*Kh*Kw, L] -> [Cin*Kh*Kw, N*L]: pool the sliding-window
-        # positions of EVERY calibration image into one column pool, so the
+        # positions of every calibration image into one column pool, so the
         # sampled positions span the whole batch instead of coming from a
         # single image (which would make the error estimate hostage to one
         # picture's content).

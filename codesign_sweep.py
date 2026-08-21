@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """
 codesign_sweep.py
-================================================================================
 The paper's core experiment, plus the digital baseline that motivates it.
 
-THE THESIS THIS SCRIPT EXISTS TO TEST
--------------------------------------
+The thesis this script exists to test:
 In a block-floating-point format, B = the number of weights sharing one scale.
 In an analog CIM macro, M = the number of rows sharing one bitline and one ADC.
 
-For an output-side-rescaled crossbar these are THE SAME PHYSICAL PARAMETER.
+For an output-side-rescaled crossbar these are the same PHYSICAL PARAMETER.
 benchmark_resnet18.weight_scale_factor already documents why: the crossbar
 rescales a whole tile's output current by one scale, so a tile may not span
 two quantization blocks with different scales. Hence B == M, necessarily.
@@ -33,36 +31,28 @@ It also computes the DIGITAL BASELINE (Section: motivation) -- ReRAM vs 6T SRAM
 on the metrics ReRAM actually wins, which are all memory metrics, not compute
 metrics. See digital_baseline() for the arithmetic and its assumptions.
 
-WHY THE FP32 PRE-TRAIN IS HOISTED OUT
--------------------------------------
+Why the FP32 PRE-TRAIN is hoisted out:
 The FP32 starting point does not depend on B, so pre-training it once and
-reusing it across all B is not just faster, it is REQUIRED for the comparison
+reusing it across all B is both faster and necessary for the comparison
 to be clean: if each B started from its own independently-trained FP32 model,
 differences between B would be confounded with run-to-run training variance
 (repeat runs vary by ~0.3 pts at fixed settings). --fp32-checkpoint enforces
 the shared start.
 
-USAGE
------
+Usage:
     python3 codesign_sweep.py --self-test        # no GPU, no data needed
 
     # See the commands without running them
     python3 codesign_sweep.py --blocks 32,64,128,256 --dry-run
 
     # 0) one shared FP32 start (~4 min on a 4070)
-    python3 qat_finetune_fp2.py --dataset cifar10 --data-dir ./data \\
-        --pretrain-epochs 30 --epochs 0 --bf16 --batch-size 256 \\
-        --save-fp32-checkpoint resnet18_cifar10_fp32.pth \\
-        --out-checkpoint /tmp/discard.pth
+    python3 qat_finetune_fp2.py --dataset cifar10 --data-dir ./data         --pretrain-epochs 30 --epochs 0 --bf16 --batch-size 256         --save-fp32-checkpoint resnet18_cifar10_fp32.pth         --out-checkpoint /tmp/discard.pth
 
     # 1) the sweep (~4 min per B: 10 QAT epochs + benchmark + model)
-    python3 codesign_sweep.py --blocks 32,64,128,256 \\
-        --fp32-checkpoint resnet18_cifar10_fp32.pth \\
-        --data-dir ./data --out-csv codesign_pareto.csv
+    python3 codesign_sweep.py --blocks 32,64,128,256         --fp32-checkpoint resnet18_cifar10_fp32.pth         --data-dir ./data --out-csv codesign_pareto.csv
 
     # 2) just the digital-baseline table (instant)
     python3 codesign_sweep.py --baseline-only --weights 11157504
-================================================================================
 """
 import argparse
 import csv

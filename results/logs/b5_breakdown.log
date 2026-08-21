@@ -1,0 +1,22 @@
+   | 
+   | Interconnect parasitic breakdown, M=128, K=16
+   | case                               raw err%   after col-calib%
+   | --------------------------------------------------------------
+   | ideal wires (sanity check)           71.309             0.0002
+   | wordline metal 0.1 ohm               71.405             0.3730
+   | wordline metal 0.5 ohm               71.780             1.8209
+   | wordline metal 1.0 ohm               72.236             3.5396
+   | wordline driver 25 ohm               75.288            14.9546
+   | wordline driver 50 ohm               78.298            25.3656
+   | wordline driver 100 ohm              82.442            39.3178
+   | bitline metal 0.1 ohm                76.019            17.3275
+   | bitline metal 0.5 ohm                84.825            49.0605
+   | bitline metal 1.0 ohm                89.114            63.9854
+   | all three, mid values                88.167            56.4318
+   | --------------------------------------------------------------
+   | The sanity row must be ~0 after calibration. Any row far above
+   | it is a parasitic the per-column constant does NOT model:
+   | it corrects R_SENSE loading only, and distributed wire
+   | resistance is not a single lumped term per column.
+   | 
+   | Wrote wire_parasitics.csv

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 qat_finetune_fp2.py
-================================================================================
 Quantization-aware fine-tuning (QAT) for FP2-E1M0 weights, reproducing the
 training recipe the FP2 paper actually uses to get its headline "close to
 FP32" accuracy numbers (Table V/VI) -- as opposed to the post-training
@@ -9,8 +8,7 @@ quantization (PTQ) regime that benchmark_resnet18.py measures, which the
 paper's own Table XI shows collapses accuracy (69.77% -> 28.02% on ResNet-18
 with no fine-tuning).
 
-WHY THIS SCRIPT EXISTS
-----------------------
+Why this script exists:
 benchmark_resnet18.py answers "how much error does my crossbar add on top of
 FP2 quantization?" -- a *circuit fidelity* question, correctly answered with
 a frozen pretrained checkpoint. It cannot answer "how close to FP32 can FP2
@@ -18,8 +16,7 @@ get?", because that question is only meaningful after the network has been
 given a chance to adapt its weights to the quantizer. That adaptation is
 what this script does.
 
-THE RECIPE (matching the paper as closely as is reproducible)
--------------------------------------------------------------
+the RECIPE (matching the paper as closely as is reproducible)
   * FP2-E1M0 weight levels {-1, -0.5, 0, +0.5, +1}, identical to
     crossbar_array_test.quantize_to_fp2 (asserted in --self-test).
   * Block floating point: every 32 CONSECUTIVE weights along the reduction
@@ -44,8 +41,7 @@ THE RECIPE (matching the paper as closely as is reproducible)
     is tiny, so quantizing them costs accuracy for almost no memory win).
     --quantize-first-last disables this exemption to expose the cost.
 
-WHAT IT REPORTS
----------------
+What it reports:
 A three-row table directly comparable to the paper's Table V/XI structure:
 
     FP32 baseline          <- the unmodified checkpoint
@@ -59,39 +55,26 @@ QAT also improves the *analog* SNR numbers (it should: QAT pushes weights
 toward the representable levels, which raises cell utilization and lowers the
 quantization residual the crossbar has to carry).
 
-USAGE
------
+Usage:
     # 0) No data / no torchvision datasets needed -- verifies the quantizer,
     #    the STE gradient path, and a full train step on random tensors:
     python3 qat_finetune_fp2.py --self-test
 
     # 1) CIFAR-10 QAT (the paper's Table V setup; downloads ~170MB once):
-    python3 qat_finetune_fp2.py --dataset cifar10 --data-dir ./data --download \\
-        --epochs 10 --batch-size 128 --lr 0.01 \\
-        --out-checkpoint resnet18_cifar10_fp2qat.pth
+    python3 qat_finetune_fp2.py --dataset cifar10 --data-dir ./data --download         --epochs 10 --batch-size 128 --lr 0.01         --out-checkpoint resnet18_cifar10_fp2qat.pth
 
     # 1b) Start from an FP32-trained CIFAR checkpoint instead of training one
     #     (much better: QAT is *fine*-tuning, it assumes a converged start):
-    python3 qat_finetune_fp2.py --dataset cifar10 --data-dir ./data \\
-        --checkpoint resnet18_cifar10_fp32.pth --epochs 10 \\
-        --out-checkpoint resnet18_cifar10_fp2qat.pth
+    python3 qat_finetune_fp2.py --dataset cifar10 --data-dir ./data         --checkpoint resnet18_cifar10_fp32.pth --epochs 10         --out-checkpoint resnet18_cifar10_fp2qat.pth
 
     # 1c) With no FP32 CIFAR checkpoint available, train one first (no quantizer):
-    python3 qat_finetune_fp2.py --dataset cifar10 --data-dir ./data --download \\
-        --pretrain-epochs 30 --epochs 10 \\
-        --out-checkpoint resnet18_cifar10_fp2qat.pth
+    python3 qat_finetune_fp2.py --dataset cifar10 --data-dir ./data --download         --pretrain-epochs 30 --epochs 10         --out-checkpoint resnet18_cifar10_fp2qat.pth
 
     # 2) ImageNet-format QAT from an existing pretrained ResNet-18:
-    python3 qat_finetune_fp2.py --dataset imagefolder \\
-        --data-dir /path/to/imagenet --checkpoint resnet18_pretrained.pth \\
-        --arch imagenet --epochs 3 --batch-size 64 --lr 0.001 \\
-        --out-checkpoint resnet18_imagenet_fp2qat.pth
+    python3 qat_finetune_fp2.py --dataset imagefolder         --data-dir /path/to/imagenet --checkpoint resnet18_pretrained.pth         --arch imagenet --epochs 3 --batch-size 64 --lr 0.001         --out-checkpoint resnet18_imagenet_fp2qat.pth
 
     # 3) Feed the result back into the crossbar benchmark:
-    python3 benchmark_resnet18.py --checkpoint resnet18_cifar10_fp2qat.pth \\
-        --cifar-arch --num-classes 10 --max-positions 32 \\
-        --out-csv results_qat.csv
-================================================================================
+    python3 benchmark_resnet18.py --checkpoint resnet18_cifar10_fp2qat.pth         --cifar-arch --num-classes 10 --max-positions 32         --out-csv results_qat.csv
 """
 import argparse
 import copy
@@ -743,9 +726,9 @@ def main():
                   f"loss={loss:.4f} train={tracc:.2f}% test={acc:.2f}%")
 
     # ---- save the CONTROL checkpoint ------------------------------------
-    # This must happen BEFORE convert_to_fp2 touches anything. It is the only
+    # This must happen before convert_to_fp2 touches anything. It is the only
     # way to later run benchmark_resnet18.py on the pre-QAT weights of the
-    # SAME architecture -- the control that isolates what QAT actually did to
+    # same architecture -- the control that isolates what QAT actually did to
     # the crossbar metrics, as opposed to what changing model/dataset did.
     if args.save_fp32_checkpoint:
         sd = {k: v.detach().cpu() for k, v in model.state_dict().items()}

@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
 analog_eval.py
-================================================================================
 End-to-end Top-1 accuracy with every convolution executed through the ACTUAL
 resistive-divider crossbar, not through a digital surrogate.
 
-WHY THIS IS THE MISSING NUMBER
-------------------------------
+Why this is the missing number:
 codesign_sweep.py reports accuracy from qat_finetune_fp2.py, which uses
 fake-quantized weights and an EXACT dot product. It contains no crossbar. So
 its accuracy column answers "what does FP2 quantization cost?" and says
@@ -23,8 +21,7 @@ between "FP2 should use B=128 on a crossbar, here is 2.8x efficiency for free"
 and "the analog noise floor binds, B=32 is correct". Both are publishable, and
 guessing between them is not an option.
 
-HOW IT STAYS EXACT AND STILL FINISHES
--------------------------------------
+How it stays exact and still finishes:
 crossbar_array_test.golden_array_matmul solves each column independently:
 
     v_blp[k] = (sum_i v_i / r_p[i,k]) / (1/Rs + sum_i 1/r_p[i,k])
@@ -45,30 +42,24 @@ So the chain of evidence is: ngspice -> golden_array_matmul -> this. Every link
 is checked, and the accuracy number at the end is a circuit-exact DC result
 rather than a noise-injection approximation.
 
-WHAT IT MODELS NOW
-------------------
+What it models now:
 ADC quantization of each bitline voltage (--adc-bits), log-normal programming
 scatter frozen per device (--variability), and power-law conductance drift with
 state-dependent and cell-to-cell-dispersed exponents (--drift).
 
-WHAT IT STILL DOES NOT MODEL
-----------------------------
+What it still does not model:
 Read noise, IR drop along the wordlines, temperature, and the tail of the
 retention distribution. All make the real number worse. Treat this as the
 ceiling the analog path allows, not as silicon.
 
-USAGE
------
+Usage:
     python3 analog_eval.py --self-test           # no data, no GPU needed
 
     # the crux number for one block size
-    python3 analog_eval.py --checkpoint qat_b128.pth --block-size 128 \\
-        --data-dir ./data --max-images 2000
+    python3 analog_eval.py --checkpoint qat_b128.pth --block-size 128         --data-dir ./data --max-images 2000
 
     # the crux TABLE: digital vs analog accuracy across the co-design sweep
-    python3 analog_eval.py --sweep 32,64,128,256 --data-dir ./data \\
-        --max-images 2000 --out-csv analog_accuracy.csv
-================================================================================
+    python3 analog_eval.py --sweep 32,64,128,256 --data-dir ./data         --max-images 2000 --out-csv analog_accuracy.csv
 """
 import argparse
 import csv
@@ -393,7 +384,7 @@ class AnalogConv2d(nn.Module):
         Gp_cal = Gp_act if calib_knows_actual else Gp_nom
         Gn_cal = Gn_act if calib_knows_actual else Gn_nom
 
-        # Drift acts AFTER programming and keeps acting. The calibration
+        # Drift acts after programming and keeps acting. The calibration
         # constants were computed at deployment, so by default they are stale
         # by exactly this much -- that is the whole question. --recalibrate
         # models a field refresh that re-reads the array and recomputes them,
@@ -1146,11 +1137,10 @@ def main():
             print(f"Worst stale point: B={worst['block_size']}, t={worst['t_label']}, "
                   f"{worst['stale']:.2f}% vs {worst['acc_ideal']:.2f}% ceiling.")
             print(f"Refreshing the constants there is worth {gap:+.2f} pts.")
-            print("\nIf `stale` holds, the calibration is genuinely compile-time and the")
-            print("contribution stands as written. If only `recalib` holds, the design needs")
-            print("a periodic read-back-and-refresh, which is a real but bounded cost -- state")
-            print("the required interval. If neither holds, drift, not the divider, is what")
-            print("limits tile height, and that becomes the paper's finding instead.")
+            print("\nReading: `stale` holding means the calibration is compile-time.")
+            print("Only `recalib` holding means periodic read-back and refresh is")
+            print("required; report the interval. Neither holding means drift rather")
+            print("than the divider limits tile height.")
     elif args.adc_sweep:
         blocks = ([int(b) for b in args.sweep.split(",")] if args.sweep
                   else [args.block_size])

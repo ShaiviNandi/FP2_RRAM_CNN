@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
 bn_baseline.py
-================================================================================
 BatchNorm recalibration as a competing baseline (TODO item N2).
 
-WHY THIS EXPERIMENT IS REQUIRED
--------------------------------
+Why this experiment is required:
 BN recalibration is the closest prior art to the per-column loading-gain
 correction: it is retraining-free, it absorbs the systematic column-current
 attenuation caused by crossbar non-idealities, and the literature reports it
@@ -21,14 +19,13 @@ measurements.
 The prediction the argument makes, which this script tests:
 
     BN recalibration should partially recover accuracy, and should recover
-    LESS as tile height grows, because column-to-column spread in G_col grows
+    less as tile height grows, because column-to-column spread in G_col grows
     with M. Per-column calibration should be flat in M, since it is exact.
 
 If BN recalibration matches per-column calibration at every M, the
 contribution is much weaker and the paper must say so.
 
-HOW BN RECALIBRATION IS IMPLEMENTED
------------------------------------
+How BN recalibration is implemented:
 Standard retraining-free procedure, no gradients anywhere:
 
   1. Convert the network to the raw, UNCORRECTED crossbar path.
@@ -46,13 +43,10 @@ Calibration images come from the TRAIN split, never the test split. Using test
 images to fit the statistics and then reporting test accuracy would inflate
 the baseline and make the comparison meaningless.
 
-USAGE
------
+Usage:
     python3 bn_baseline.py --self-test
 
-    python3 bn_baseline.py --sweep 32,64,128,256 --data-dir ./data \\
-        --max-images 0 --adc-bits 6 --out-csv bn_baseline.csv
-================================================================================
+    python3 bn_baseline.py --sweep 32,64,128,256 --data-dir ./data         --max-images 0 --adc-bits 6 --out-csv bn_baseline.csv
 """
 import argparse
 import csv
@@ -143,7 +137,7 @@ def compare(ckpt, block, args, device):
         out[label] = ae.top1(m, test, device)
         del m
 
-    # BN recalibration applied to the RAW path -- the whole point is that it
+    # BN recalibration applied to the raw path -- the whole point is that it
     # is an alternative to the per-column correction, not an addition to it.
     m = ae.build_model(ckpt, args.num_classes, device)
     ae.convert_model(m, block, args.tile_k, args.r_sense, args.vread,

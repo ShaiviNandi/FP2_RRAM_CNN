@@ -2,7 +2,7 @@
 """
 ReRAM RESET-pulse calibration sweep -- WITH the 1T1R select switch in series.
 
-WHY THIS EXISTS: the original calibration_sweep.py characterized each pulse
+WHY this EXISTS: the original calibration_sweep.py characterized each pulse
 (width, voltage) against a bare 20-ohm write-path resistor. column_mac_test.py
 later confirmed (2026-07 session) that with the select switch (Ron=1ohm) in
 the loop, the previously-calibrated 143ns/-1.5V "intermediate" pulse instead
@@ -21,15 +21,15 @@ via Vsel) -> series resistor -> ground. This makes the calibration table
 match the ACTUAL circuit topology used during real column programming, not
 an idealized bare-resistor stand-in.
 
-WHAT THIS DOES NOT MODEL: same caveats as the original script -- no thermal
+WHAT this does not MODEL: same caveats as the original script -- no thermal
 accumulation across repeated pulses, no automatic write-verify search. Also
 does not model neighbor-cell sneak paths (that's a separate, still-open
 characterization step); this isolates just the switch-Ron effect on a
 single cell.
 
 Usage:
-    python3 calibration_sweep_with_switch.py --osdi rram_v_1_0_0.osdi \\
-        --widths 100 110 120 130 143 150 160 170 180 \\
+    python3 calibration_sweep_with_switch.py --osdi rram_v_1_0_0.osdi \
+        --widths 100 110 120 130 143 150 160 170 180 \
         --voltages -1.5
 
 Requires: ngspice (built with OSDI support) on PATH, or pass --ngspice-bin.
@@ -217,7 +217,7 @@ def main():
                 print(f"{width:10.1f} {voltage:8.2f}  WARNING: read current ~0, cell may be in extreme HRS or sim diverged")
                 continue
 
-            # Subtract BOTH the series resistor AND the switch Ron to
+            # Subtract both the series resistor AND the switch Ron to
             # isolate the cell's own resistance -- this is the key
             # difference vs. the bare-resistor script.
             r_cell = abs(args.vread / i_read) - args.r_program - args.r_on
@@ -248,17 +248,16 @@ def main():
             for w, v, r, ratio, cls in sorted(intermediate, key=lambda x: abs(x[2] - (r_lrs_ref + args.r_hrs_threshold) / 2)):
                 print(f"    width={w}ns, amplitude={v}V  ->  R={r:.1f} ohm ({ratio:.2f}x LRS reference)")
             print()
-            print("After selecting a candidate above, update WIDTH_FOR_MAGNITUDE and")
-            print("R_FOR_MAGNITUDE in column_mac_test.py (the 0.5 entries) to these new")
-            print("values -- the old 143ns/1095.6ohm entries were calibrated WITHOUT the")
-            print("switch and are now confirmed invalid for that circuit.")
+            print("Update WIDTH_FOR_MAGNITUDE and R_FOR_MAGNITUDE in")
+            print("column_mac_test.py (the 0.5 entries) to these values. Settings")
+            print("calibrated on the bare resistor do not transfer: the select")
+            print("switch sits in series and shifts the transition.")
         else:
-            print("No sweep points landed in the 'intermediate' band with the current")
-            print(f"--r-hrs-threshold ({args.r_hrs_threshold} ohm). Given how sharp the")
-            print("cliff was in the bare-resistor sweep, a finer width step may be needed")
-            print("(e.g. 1ns increments between 100-140ns) to find a new stable landing")
-            print("point with Ron now in the loop -- the cliff itself likely shifted to")
-            print("an earlier width, not just changed height.")
+            print("No sweep points landed in the 'intermediate' band at")
+            print(f"--r-hrs-threshold {args.r_hrs_threshold} ohm. The transition is")
+            print("sharp, so a finer width step is likely needed -- try 1 ns")
+            print("increments across 100-140 ns. Adding the switch shifts the")
+            print("transition width as well as its height.")
 
     if not args.keep_files:
         shutil.rmtree(workdir, ignore_errors=True)

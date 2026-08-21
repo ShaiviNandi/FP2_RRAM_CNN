@@ -1,0 +1,38 @@
+NeuroSim at /home/shaiv/DNN_NeuroSim_V1.4
+memcelltype currently: 1
+
+=== RRAM ===
+  memcelltype 1 -> 2 (rram)
+  resistanceOn 542.8 -> 50000.0
+  rebuilding NeuroSIM ...
+  $ /usr/bin/python3 inference.py --dataset cifar10 --model VGG8 --mode WAGE --cellBit 2 --subArray 128 --ADCprecision 6 --wl_weight 2 --onoffratio 403
+  Param.cpp restored
+
+==============================================================================
+NEUROSIM, SAME TOOL, SAME NETWORK, DIFFERENT CELL
+==============================================================================
+weight 2b, cell 2b -> 1 cell(s) per weight  [FP2: one cell, no shift-add tree]
+------------------------------------------------------------------------------
+metric                                      rram
+------------------------------------------------------------------------------
+chip area (mm2)                           87.677
+  CIM array (mm2)                          0.932
+  ADC / sense (mm2)                        2.054
+  interconnect (mm2)                       9.179
+  accumulation (mm2)                       2.926
+  other periphery (mm2)                   13.161
+latency/image (us)                        123.73
+dynamic energy/img (uJ)                   10.517
+leakage power (uW)                         473.2
+  ADC energy (uJ)                          4.676
+  accum energy (uJ)                        0.888
+  other energy (uJ)                        4.952
+TOPS                                        9.96
+TOPS/W                                     95.48
+TOPS/mm2                                  0.1135
+FPS                                        8,082
+accuracy (%)                                  89
+1T1R tx width needed (F)                      --
+------------------------------------------------------------------------------
+
+Wrote rlrs_ns_50000.csv

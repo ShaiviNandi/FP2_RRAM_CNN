@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
 ngspice_full_sweep.py
-================================================================================
-Runs EVERY crossbar tile of EVERY layer through real ngspice, in parallel,
+Runs every crossbar tile of every layer through real ngspice, in parallel,
 with checkpoint/resume -- the exhaustive version of what
 benchmark_resnet18.py --validate-ngspice does on 10 random samples.
 
 Also extracts POWER, which the fast nodal model in benchmark_resnet18.py
 never reported.
 
-WHY THIS IS DIFFERENT FROM --validate-ngspice
----------------------------------------------
+WHY this IS DIFFERENT FROM --validate-ngspice
 `--validate-ngspice 10` spot-checks ten randomly chosen (layer, tile,
 position) triples and reports agreement of ~1e-7%. That is strong evidence
 but it is a sample, and a sample cannot rule out a systematic failure
@@ -19,8 +17,7 @@ partial M-tile of a layer whose M is not a multiple of 32, or a tile whose
 weights are all zero so both bitlines float at the same potential). This
 script visits all of them.
 
-BATCHED NETLISTS -- AND WHY THAT IS PHYSICALLY HONEST
------------------------------------------------------
+Batched netlists -- and why that is physically honest:
 One ngspice invocation per (tile, position) means ~600k process spawns, and
 spawn+parse dominates the runtime of a circuit this small. So this script
 packs `--positions-per-netlist` positions into a SINGLE netlist as that many
@@ -35,8 +32,7 @@ diffs the batched netlist against (a) the unbatched
 crossbar_array_test.build_array_read_netlist through the same ngspice and
 (b) the nodal golden model, and fails loudly on any disagreement.
 
-POWER
------
+Power:
 Read power is computed from the ngspice node voltages by Ohm's law, which
 is exact given those voltages -- no second simulation and no estimate:
 
@@ -50,27 +46,19 @@ macro -- see hw_model.py, which models it), digital partial-sum accumulation,
 and all WRITE/programming energy. Those exclusions are why hw_model.py
 exists; this script supplies the array-level term it needs.
 
-USAGE
------
+Usage:
     # 0) Prove the batched netlist == unbatched netlist == nodal model
     python3 ngspice_full_sweep.py --self-test
 
     # 1) Time-estimate before committing to the run
-    python3 ngspice_full_sweep.py --checkpoint resnet18_cifar10_fp2qat.pth \\
-        --cifar-arch --num-classes 10 --calib-dataset cifar10 --calib-dir ./data \\
-        --max-positions 32 --dry-run
+    python3 ngspice_full_sweep.py --checkpoint resnet18_cifar10_fp2qat.pth         --cifar-arch --num-classes 10 --calib-dataset cifar10 --calib-dir ./data         --max-positions 32 --dry-run
 
     # 2) The real thing (resumable -- rerun the identical command after a
     #    crash or Ctrl-C and it picks up where it stopped)
-    python3 ngspice_full_sweep.py --checkpoint resnet18_cifar10_fp2qat.pth \\
-        --cifar-arch --num-classes 10 --calib-dataset cifar10 --calib-dir ./data \\
-        --max-positions 32 --skip-first-last --workers 8 \\
-        --out-jsonl ngspice_full.jsonl --out-csv ngspice_full_summary.csv
+    python3 ngspice_full_sweep.py --checkpoint resnet18_cifar10_fp2qat.pth         --cifar-arch --num-classes 10 --calib-dataset cifar10 --calib-dir ./data         --max-positions 32 --skip-first-last --workers 8         --out-jsonl ngspice_full.jsonl --out-csv ngspice_full_summary.csv
 
     # 3) Summarize an interrupted/finished run without re-simulating
-    python3 ngspice_full_sweep.py --summarize-only --out-jsonl ngspice_full.jsonl \\
-        --out-csv ngspice_full_summary.csv
-================================================================================
+    python3 ngspice_full_sweep.py --summarize-only --out-jsonl ngspice_full.jsonl         --out-csv ngspice_full_summary.csv
 """
 import argparse
 import json

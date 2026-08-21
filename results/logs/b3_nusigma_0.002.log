@@ -1,0 +1,33 @@
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.002, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1s  raw  11.80%   stale-calib  92.39%   recalibrated  92.23%   (ceiling 92.81%)
+   |   t=    1h  raw  10.04%   stale-calib  89.55%   recalibrated  92.11%   (ceiling 92.81%)
+   |   t=    1d  raw  10.02%   stale-calib  85.96%   recalibrated  92.10%   (ceiling 92.81%)
+   |   t=   1mo  raw  10.00%   stale-calib  78.90%   recalibrated  91.93%   (ceiling 92.81%)
+   |   t=    1y  raw  10.00%   stale-calib  71.53%   recalibrated  92.03%   (ceiling 92.81%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |   128      1s    11.80     92.39      92.23      92.81       -0.42
+   |   128      1h    10.04     89.55      92.11      92.81       -3.26
+   |   128      1d    10.02     85.96      92.10      92.81       -6.85
+   |   128     1mo    10.00     78.90      91.93      92.81      -13.91
+   |   128      1y    10.00     71.53      92.03      92.81      -21.28
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=128, t=1y, 71.53% vs 92.81% ceiling.
+   | Refreshing the constants there is worth +20.50 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_nusigma_0.002.csv

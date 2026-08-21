@@ -1,0 +1,155 @@
+   | Building model and capturing calibration activations...
+   | Calibration: 16 real images from cifar10 ((16, 3, 32, 32)), activation stats captured from these.
+   | --skip-first-last: excluding 'conv1'
+   | Enumerating tiles...
+   | 
+   | Tiles total 21856   already done 0   to run 21856
+   | ngspice invocations to run: 21856  (positions packed 8/netlist)
+   | MAC-reads represented: 357,040,128
+   | 
+   | Calibrating wall-time on 3 representative tiles...
+   |   360 ms per tile-batch, 15 workers
+   |   estimated wall time: 8.7 min (0.15 h)
+   |   200/21856 tiles  19.3/s  elapsed 0.2m  ETA 18.7m  errors 0
+   |   400/21856 tiles  20.7/s  elapsed 0.3m  ETA 17.2m  errors 0
+   |   600/21856 tiles  21.0/s  elapsed 0.5m  ETA 16.8m  errors 0
+   |   800/21856 tiles  21.4/s  elapsed 0.6m  ETA 16.4m  errors 0
+   |   1000/21856 tiles  21.2/s  elapsed 0.8m  ETA 16.4m  errors 0
+   |   1200/21856 tiles  21.2/s  elapsed 0.9m  ETA 16.2m  errors 0
+   |   1400/21856 tiles  21.2/s  elapsed 1.1m  ETA 16.1m  errors 0
+   |   1600/21856 tiles  21.1/s  elapsed 1.3m  ETA 16.0m  errors 0
+   |   1800/21856 tiles  21.1/s  elapsed 1.4m  ETA 15.8m  errors 0
+   |   2000/21856 tiles  21.2/s  elapsed 1.6m  ETA 15.6m  errors 0
+   |   2200/21856 tiles  21.1/s  elapsed 1.7m  ETA 15.5m  errors 0
+   |   2400/21856 tiles  21.2/s  elapsed 1.9m  ETA 15.3m  errors 0
+   |   2600/21856 tiles  21.2/s  elapsed 2.0m  ETA 15.1m  errors 0
+   |   2800/21856 tiles  21.2/s  elapsed 2.2m  ETA 15.0m  errors 0
+   |   3000/21856 tiles  21.2/s  elapsed 2.4m  ETA 14.8m  errors 0
+   |   3200/21856 tiles  21.3/s  elapsed 2.5m  ETA 14.6m  errors 0
+   |   3400/21856 tiles  21.3/s  elapsed 2.7m  ETA 14.4m  errors 0
+   |   3600/21856 tiles  21.3/s  elapsed 2.8m  ETA 14.3m  errors 0
+   |   3800/21856 tiles  21.3/s  elapsed 3.0m  ETA 14.1m  errors 0
+   |   4000/21856 tiles  21.4/s  elapsed 3.1m  ETA 13.9m  errors 0
+   |   4200/21856 tiles  21.3/s  elapsed 3.3m  ETA 13.8m  errors 0
+   |   4400/21856 tiles  21.4/s  elapsed 3.4m  ETA 13.6m  errors 0
+   |   4600/21856 tiles  21.4/s  elapsed 3.6m  ETA 13.4m  errors 0
+   |   4800/21856 tiles  21.4/s  elapsed 3.7m  ETA 13.3m  errors 0
+   |   5000/21856 tiles  21.4/s  elapsed 3.9m  ETA 13.1m  errors 0
+   |   5200/21856 tiles  21.4/s  elapsed 4.0m  ETA 13.0m  errors 0
+   |   5400/21856 tiles  21.4/s  elapsed 4.2m  ETA 12.8m  errors 0
+   |   5600/21856 tiles  21.4/s  elapsed 4.4m  ETA 12.7m  errors 0
+   |   5800/21856 tiles  21.4/s  elapsed 4.5m  ETA 12.5m  errors 0
+   |   6000/21856 tiles  21.4/s  elapsed 4.7m  ETA 12.3m  errors 0
+   |   6200/21856 tiles  21.4/s  elapsed 4.8m  ETA 12.2m  errors 0
+   |   6400/21856 tiles  21.4/s  elapsed 5.0m  ETA 12.0m  errors 0
+   |   6600/21856 tiles  21.4/s  elapsed 5.1m  ETA 11.9m  errors 0
+   |   6800/21856 tiles  21.4/s  elapsed 5.3m  ETA 11.7m  errors 0
+   |   7000/21856 tiles  21.4/s  elapsed 5.4m  ETA 11.6m  errors 0
+   |   7200/21856 tiles  21.4/s  elapsed 5.6m  ETA 11.4m  errors 0
+   |   7400/21856 tiles  21.5/s  elapsed 5.7m  ETA 11.2m  errors 0
+   |   7600/21856 tiles  21.5/s  elapsed 5.9m  ETA 11.1m  errors 0
+   |   7800/21856 tiles  21.5/s  elapsed 6.1m  ETA 10.9m  errors 0
+   |   8000/21856 tiles  21.5/s  elapsed 6.2m  ETA 10.7m  errors 0
+   |   8200/21856 tiles  21.5/s  elapsed 6.4m  ETA 10.6m  errors 0
+   |   8400/21856 tiles  21.5/s  elapsed 6.5m  ETA 10.4m  errors 0
+   |   8600/21856 tiles  21.5/s  elapsed 6.7m  ETA 10.3m  errors 0
+   |   8800/21856 tiles  21.5/s  elapsed 6.8m  ETA 10.1m  errors 0
+   |   9000/21856 tiles  21.6/s  elapsed 7.0m  ETA 9.9m  errors 0
+   |   9200/21856 tiles  21.6/s  elapsed 7.1m  ETA 9.8m  errors 0
+   |   9400/21856 tiles  21.6/s  elapsed 7.3m  ETA 9.6m  errors 0
+   |   9600/21856 tiles  21.6/s  elapsed 7.4m  ETA 9.5m  errors 0
+   |   9800/21856 tiles  21.6/s  elapsed 7.6m  ETA 9.3m  errors 0
+   |   10000/21856 tiles  21.6/s  elapsed 7.7m  ETA 9.1m  errors 0
+   |   10200/21856 tiles  21.6/s  elapsed 7.9m  ETA 9.0m  errors 0
+   |   10400/21856 tiles  21.6/s  elapsed 8.0m  ETA 8.8m  errors 0
+   |   10600/21856 tiles  21.6/s  elapsed 8.2m  ETA 8.7m  errors 0
+   |   10800/21856 tiles  21.6/s  elapsed 8.3m  ETA 8.5m  errors 0
+   |   11000/21856 tiles  21.6/s  elapsed 8.5m  ETA 8.4m  errors 0
+   |   11200/21856 tiles  21.6/s  elapsed 8.6m  ETA 8.2m  errors 0
+   |   11400/21856 tiles  21.7/s  elapsed 8.8m  ETA 8.0m  errors 0
+   |   11600/21856 tiles  21.7/s  elapsed 8.9m  ETA 7.9m  errors 0
+   |   11800/21856 tiles  21.7/s  elapsed 9.1m  ETA 7.7m  errors 0
+   |   12000/21856 tiles  21.7/s  elapsed 9.2m  ETA 7.6m  errors 0
+   |   12200/21856 tiles  21.7/s  elapsed 9.4m  ETA 7.4m  errors 0
+   |   12400/21856 tiles  21.7/s  elapsed 9.5m  ETA 7.3m  errors 0
+   |   12600/21856 tiles  21.7/s  elapsed 9.7m  ETA 7.1m  errors 0
+   |   12800/21856 tiles  21.7/s  elapsed 9.8m  ETA 7.0m  errors 0
+   |   13000/21856 tiles  21.7/s  elapsed 10.0m  ETA 6.8m  errors 0
+   |   13200/21856 tiles  21.7/s  elapsed 10.1m  ETA 6.6m  errors 0
+   |   13400/21856 tiles  21.7/s  elapsed 10.3m  ETA 6.5m  errors 0
+   |   13600/21856 tiles  21.7/s  elapsed 10.4m  ETA 6.3m  errors 0
+   |   13800/21856 tiles  21.7/s  elapsed 10.6m  ETA 6.2m  errors 0
+   |   14000/21856 tiles  21.7/s  elapsed 10.7m  ETA 6.0m  errors 0
+   |   14200/21856 tiles  21.7/s  elapsed 10.9m  ETA 5.9m  errors 0
+   |   14400/21856 tiles  21.7/s  elapsed 11.0m  ETA 5.7m  errors 0
+   |   14600/21856 tiles  21.7/s  elapsed 11.2m  ETA 5.6m  errors 0
+   |   14800/21856 tiles  21.7/s  elapsed 11.3m  ETA 5.4m  errors 0
+   |   15000/21856 tiles  21.7/s  elapsed 11.5m  ETA 5.3m  errors 0
+   |   15200/21856 tiles  21.7/s  elapsed 11.7m  ETA 5.1m  errors 0
+   |   15400/21856 tiles  21.7/s  elapsed 11.8m  ETA 4.9m  errors 0
+   |   15600/21856 tiles  21.7/s  elapsed 12.0m  ETA 4.8m  errors 0
+   |   15800/21856 tiles  21.7/s  elapsed 12.1m  ETA 4.6m  errors 0
+   |   16000/21856 tiles  21.7/s  elapsed 12.3m  ETA 4.5m  errors 0
+   |   16200/21856 tiles  21.7/s  elapsed 12.4m  ETA 4.3m  errors 0
+   |   16400/21856 tiles  21.7/s  elapsed 12.6m  ETA 4.2m  errors 0
+   |   16600/21856 tiles  21.8/s  elapsed 12.7m  ETA 4.0m  errors 0
+   |   16800/21856 tiles  21.7/s  elapsed 12.9m  ETA 3.9m  errors 0
+   |   17000/21856 tiles  21.8/s  elapsed 13.0m  ETA 3.7m  errors 0
+   |   17200/21856 tiles  21.8/s  elapsed 13.2m  ETA 3.6m  errors 0
+   |   17400/21856 tiles  21.7/s  elapsed 13.3m  ETA 3.4m  errors 0
+   |   17600/21856 tiles  21.8/s  elapsed 13.5m  ETA 3.3m  errors 0
+   |   17800/21856 tiles  21.8/s  elapsed 13.6m  ETA 3.1m  errors 0
+   |   18000/21856 tiles  21.8/s  elapsed 13.8m  ETA 3.0m  errors 0
+   |   18200/21856 tiles  21.8/s  elapsed 13.9m  ETA 2.8m  errors 0
+   |   18400/21856 tiles  21.8/s  elapsed 14.1m  ETA 2.6m  errors 0
+   |   18600/21856 tiles  21.8/s  elapsed 14.3m  ETA 2.5m  errors 0
+   |   18800/21856 tiles  21.8/s  elapsed 14.4m  ETA 2.3m  errors 0
+   |   19000/21856 tiles  21.8/s  elapsed 14.5m  ETA 2.2m  errors 0
+   |   19200/21856 tiles  21.8/s  elapsed 14.7m  ETA 2.0m  errors 0
+   |   19400/21856 tiles  21.8/s  elapsed 14.9m  ETA 1.9m  errors 0
+   |   19600/21856 tiles  21.8/s  elapsed 15.0m  ETA 1.7m  errors 0
+   |   19800/21856 tiles  21.8/s  elapsed 15.2m  ETA 1.6m  errors 0
+   |   20000/21856 tiles  21.8/s  elapsed 15.3m  ETA 1.4m  errors 0
+   |   20200/21856 tiles  21.8/s  elapsed 15.5m  ETA 1.3m  errors 0
+   |   20400/21856 tiles  21.8/s  elapsed 15.6m  ETA 1.1m  errors 0
+   |   20600/21856 tiles  21.8/s  elapsed 15.8m  ETA 1.0m  errors 0
+   |   20800/21856 tiles  21.8/s  elapsed 15.9m  ETA 0.8m  errors 0
+   |   21000/21856 tiles  21.8/s  elapsed 16.1m  ETA 0.7m  errors 0
+   |   21200/21856 tiles  21.8/s  elapsed 16.2m  ETA 0.5m  errors 0
+   |   21400/21856 tiles  21.8/s  elapsed 16.4m  ETA 0.3m  errors 0
+   |   21600/21856 tiles  21.8/s  elapsed 16.5m  ETA 0.2m  errors 0
+   |   21800/21856 tiles  21.8/s  elapsed 16.7m  ETA 0.0m  errors 0
+   |   21856/21856 tiles  21.8/s  elapsed 16.7m  ETA 0.0m  errors 0
+   | 
+   | Sweep finished in 16.7 min, 0 errors.
+   | 
+   | Layer                      tiles  RelErr mean%  RelErr max%  P mean(uW)  P max(uW)
+   | ----------------------------------------------------------------------------------
+   | layer1.0.conv1                80     1.775e-07    2.948e-07      163.26     681.39
+   | layer1.0.conv2                80     2.101e-07    3.116e-07      156.20     564.38
+   | layer1.1.conv1                80     1.729e-07    2.318e-07      455.26    2365.98
+   | layer1.1.conv2                80     1.764e-07    2.473e-07      103.35     717.47
+   | layer2.0.conv1               160     1.594e-07    2.248e-07      425.86    2273.89
+   | layer2.0.conv2               288     2.455e-07    3.400e-07      115.93     442.60
+   | layer2.0.downsample.0         32     1.661e-07    2.291e-07      298.42     757.99
+   | layer2.1.conv1               288     1.711e-07    2.317e-07      312.35    1343.36
+   | layer2.1.conv2               288     2.252e-07    3.084e-07       63.70     286.88
+   | layer3.0.conv1               576     1.655e-07    2.813e-07      418.96    2107.77
+   | layer3.0.conv2              1152     2.470e-07    3.729e-07       76.95     352.36
+   | layer3.0.downsample.0         64     1.596e-07    2.092e-07      367.72    1281.13
+   | layer3.1.conv1              1152     2.025e-07    3.031e-07      121.32     906.33
+   | layer3.1.conv2              1152     2.140e-07    3.343e-07       37.14     270.13
+   | layer4.0.conv1              2304     1.917e-07    3.114e-07      255.22    2987.16
+   | layer4.0.conv2              4608     2.463e-07    4.185e-07      113.01     688.44
+   | layer4.0.downsample.0        256     1.868e-07    2.565e-07      324.30    1246.62
+   | layer4.1.conv1              4608     1.844e-07    3.288e-07      294.54    3345.13
+   | layer4.1.conv2              4608     2.214e-07    3.717e-07       79.41     579.97
+   | ----------------------------------------------------------------------------------
+   | Worst per-layer max relative error (ngspice vs nodal): 4.185e-07 %
+   | Total tiles simulated: 21856
+   | Array read power, summed over all simulated tile-reads: 3740.633 mW
+   | Array-only read energy per MAC: 10476.7863 pJ/MAC (EXCLUDES ADC/DAC/driver/digital -- see hw_model.py)
+   | 
+   | [PASS] Every simulated tile agrees with the nodal model to <1e-3%. The fast model in benchmark_resnet18.py is exact for this topology, not approximately right on a lucky sample.
+   | 
+   | Summary written to ngspice_b128_summary.csv

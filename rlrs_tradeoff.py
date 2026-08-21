@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
 rlrs_tradeoff.py
-================================================================================
 Where should R_LRS sit? One table combining what the device costs in silicon
 against what it buys in signal.
 
-THE TENSION
------------
+The tension:
 R_LRS pulls two ways at once, which is why a single operating point cannot be
 defended and a sweep is the actual result.
 
@@ -24,8 +22,7 @@ current still flows, still dissipates, still sets the transistor width. So the
 calibration does not fix R_LRS: it removes accuracy from the list of reasons
 to pick a high one, leaving area and signal.
 
-WHAT THIS SCRIPT REPORTS AT EACH R_LRS
---------------------------------------
+WHAT this SCRIPT REPORTS AT EACH R_LRS
   from first principles   read current per cell, column current, the select
                           transistor width NeuroSim would demand, and the
                           uncorrected loading attenuation
@@ -36,14 +33,11 @@ WHAT THIS SCRIPT REPORTS AT EACH R_LRS
 The first block always runs and needs nothing installed. The other two are
 opt-in because they are slow.
 
-USAGE
------
+Usage:
     python3 rlrs_tradeoff.py --self-test
     python3 rlrs_tradeoff.py                      # analysis only, instant
     python3 rlrs_tradeoff.py --accuracy --max-images 2000
-    NEUROSIM_DIR=~/DNN_NeuroSim_V1.4 python3 rlrs_tradeoff.py \\
-        --accuracy --neurosim --out-csv rlrs_tradeoff.csv
-================================================================================
+    NEUROSIM_DIR=~/DNN_NeuroSim_V1.4 python3 rlrs_tradeoff.py         --accuracy --neurosim --out-csv rlrs_tradeoff.csv
 """
 import argparse
 import csv

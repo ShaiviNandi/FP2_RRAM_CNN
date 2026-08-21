@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
 make_figures.py
-================================================================================
 Every figure and LaTeX table for the paper, regenerated from the CSV/JSON
 artifacts the pipeline already produces. Nothing here computes a new result --
 if a number appears in a figure it came from a file on disk, and the figure
 caption says which one.
 
-THE TWO ARCHITECTURES UNDER COMPARISON
---------------------------------------
+The two architectures under comparison:
 A  FP2-2T2R ReRAM crossbar (proposed)
      FP2-E1M0 weights {-1,-.5,0,+.5,+1} on 3 ReRAM resistance states
      (LRS / mid / HRS), one differential 2T2R pair per signed weight.
@@ -17,7 +15,7 @@ A  FP2-2T2R ReRAM crossbar (proposed)
      Passive shared-Rsense readout on two bitlines per column.
      PROPOSED ADDITION: a per-column loading-gain constant (1 + Rs*G_col),
      computed at compile time from the programmed conductances, applied to
-     each bitline digitally BEFORE the differential subtraction.
+     each bitline digitally before the differential subtraction.
 
 B  FP2-digital SRAM accelerator (baseline)
      Identical network, identical FP2 quantization and block scaling, weights
@@ -38,7 +36,6 @@ USAGE
     pip install matplotlib --break-system-packages
     python3 make_figures.py --self-test
     python3 make_figures.py --outdir paper/figures
-================================================================================
 """
 import argparse
 import csv

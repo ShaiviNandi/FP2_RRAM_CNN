@@ -2,7 +2,7 @@
 """
 Golden reference model for the FP2-E1M0 -> ReRAM crossbar MAC.
 
-Independently (i.e. NOT by re-running the RTL or the Verilog-A model)
+Independently (i.e. not by re-running the RTL or the Verilog-A model)
 computes what the crossbar current *should* be for a given stream of
 FP2-E1M0-encoded weights, so it can be diffed against:
   - the RTL's registered Dir/Mag DAC control outputs (dac_stimulus.txt), and
@@ -16,8 +16,8 @@ digital decode + crossbar wiring behave as intended", not for validating
 the analog model's own accuracy (that's what the .va model itself is for).
 
 Usage:
-    python3 golden_mac_reference.py dac_stimulus.txt \\
-        --r-hrs 100e3 --r-lrs 1e3 --vhigh 1.2 \\
+    python3 golden_mac_reference.py dac_stimulus.txt \
+        --r-hrs 100e3 --r-lrs 1e3 --vhigh 1.2 \
         --results results.txt --tolerance 0.15
 """
 import argparse

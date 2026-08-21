@@ -1677,45 +1677,163 @@ the breakdown closes.
 
 \begin{table}[h]
 \centering
-\caption{NeuroSim V1.4 chip area, VGG-8, 65\,nm. Total $80.06$\,mm².}
-\begin{tabular}{lrr}
+\caption{NeuroSim V1.4 chip area, VGG-8, 65\,nm, at two weight precisions.
+Shares are of each configuration's own chip total.}
+\begin{tabular}{lrrrr}
 \toprule
-Component & Area (\textmu m²) & Share \\
+ & \multicolumn{2}{c}{8-bit weights} & \multicolumn{2}{c}{FP2, 128 rows} \\
+Component & \textmu m² & Share & \textmu m² & Share \\
 \midrule
-CIM array           & 21{,}031{,}200 & 26.3\% \\
-Accumulation circuits & 16{,}177{,}500 & 20.2\% \\
-ADC                 & 15{,}384{,}400 & 19.2\% \\
-Interconnect        & 12{,}141{,}100 & 15.2\% \\
-Other peripheries   & 11{,}549{,}600 & 14.4\% \\
+CIM array           & 21{,}031{,}200 & 26.3\% &    931{,}790 &  0.9\% \\
+Accumulation        & 16{,}177{,}500 & 20.2\% &  2{,}926{,}470 &  2.9\% \\
+ADC                 & 15{,}384{,}400 & 19.2\% &  2{,}054{,}420 &  2.0\% \\
+Interconnect        & 12{,}141{,}100 & 15.2\% &  9{,}866{,}970 &  9.8\% \\
+Other peripheries   & 11{,}549{,}600 & 14.4\% & 14{,}629{,}000 & 14.5\% \\
 \midrule
-Named subtotal      & 76{,}283{,}800 & 95.3\% \\
-Residual            &  3{,}772{,}300 &  4.7\% \\
+Named subtotal      & 76{,}283{,}800 & 95.3\% & 30{,}408{,}650 & 30.2\% \\
+Residual            &  3{,}772{,}300 &  4.7\% & 70{,}155{,}350 & 69.8\% \\
+\midrule
+Chip total          & 80{,}056{,}100 &        &100{,}564{,}000 &        \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The $4.7\%$ residual is not mysterious either. Reading
-\texttt{ChipCalculateArea} in \texttt{Chip.cpp}, nine statements add to the
-area accumulator, and several of them --- the global H-tree or bus, the global
-buffer, pooling, global accumulation, ReLU and sigmoid --- have no
-corresponding print. Name it ``global buffer, interconnect and activation
-units'' and move on.
+\textbf{The closure depends on weight precision, and that is the finding.} At
+8-bit weights the printed components cover $95.3\%$ of the chip. At FP2 they
+cover $30.2\%$. The residual is the same set of blocks in both cases --- the
+global H-tree or bus, global buffer, pooling, global accumulation, ReLU and
+sigmoid, none of which \texttt{Chip.cpp} prints separately --- but those blocks
+are sized by activation volume and tile count, \emph{not} by bits per weight.
+Cutting the weights from 8 bits to 2 shrinks the arrays by a factor of
+twenty-three and leaves the global infrastructure where it was, so its share
+rises from $4.7\%$ to $70\%$.
+
+\begin{keybox}{Which area argument this kills, and which it does not}
+A small array is good. The problem is what a $0.9\%$ array does to the
+\emph{density} argument.
+
+\textbf{Dead: ``ReRAM cells are smaller than SRAM cells, so the chip is
+smaller.''} A 1T1R cell at ${\sim}40\,F^2$ against a 6T cell at
+$150$--$200\,F^2$ is a real four- to five-fold advantage, but it applies to
+$0.9\%$ of the chip. Swapping the FP2 array for SRAM at five times the cell
+area grows the chip from $100.56$ to $104.29$\,mm², i.e.\ $3.7\%$. That is
+not a headline, and quoting a cell-level density ratio as though it were a
+chip-level one would be misleading.
+
+\textbf{Alive, and measured: fewer, taller tiles shrink everything at once.}
+Going from 32 to 128 rows cuts the chip from $271.9$ to $100.6$\,mm², a factor
+of $2.70$. The array \emph{grows} $11.3\%$ over that change. The saving comes
+from tile count: fewer tiles means less interconnect ($-55.6\%$), less
+accumulation ($-67.6\%$), fewer converters ($-67.8\%$) and a smaller global
+fabric. The win is architectural, not material.
+
+\textbf{And the ADC argument belongs in energy, not area.} At FP2 the
+converters are $2.0\%$ of chip area but $51.2\%$ of dynamic energy. Arguing
+ADC amortisation on an area basis understates it by an order of magnitude;
+arguing it on energy is both stronger and correct.
+\end{keybox}
 
 \begin{keybox}{What this changes}
-\textbf{The ADC is not the largest area term.} At 19.2\% it sits third, behind
-the array at 26.3\% and accumulation at 20.2\%. Our own tile-level model puts
-the ADC at 55\%, and both can be true: the tile-level figure excludes
-interconnect, global buffer and pooling, so it is a percentage of a much
-smaller denominator. \textbf{Always state which denominator is being used.}
-Putting 55\% and 19.2\% in the same table without that qualification is the
-kind of thing a reviewer catches.
+\textbf{The ADC is not the largest area term.} At FP2 it is $2.0\%$ of chip
+area. The tile-level model puts it at $55\%$, and both are correct: the
+tile-level denominator is array plus converters plus drive plus accumulation,
+excluding interconnect, global buffer and pooling. \textbf{Always state the
+denominator.} Putting $55\%$ and $2.0\%$ in one table without that
+qualification is what a reviewer catches.
 
-An area \emph{improvement} can now be argued properly, because the breakdown
-closes: run the baseline and proposed configurations and difference them
-component by component, with \texttt{neurosim\_area\_breakdown.py --log A
---log B}. Attribute any saving to the component that moved. If the total falls
-while the array stays fixed, the saving came from the converters, and that is
-a different claim from a density claim.
+\textbf{Never quote the chip total.} The unnamed remainder is not a missing
+component. It is floorplan whitespace, and it is large enough at FP2 to make
+the total behave nonsensically.
+
+Holding everything fixed and sweeping only the 1T1R cell width gives:
+
+\begin{center}\small
+\begin{tabular}{rrrrr}
+\toprule
+Cell width & Chip total & Array & Named & Closes \\
+\midrule
+$12\,F$  & 120.41\,mm² & 0.932 & 33.71 & 28.0\% \\
+$48\,F$  &  \textbf{62.39}\,mm² & 3.727 & 35.83 & 57.4\% \\
+$128\,F$ &  71.59\,mm² & 9.939 & 53.85 & 75.2\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{A four-times-larger cell produces a two-times-smaller chip.} The array
+line itself is fine --- it tracks cell width exactly, $4.00\times$ and
+$10.66\times$ against width ratios of $4.00$ and $10.67$, so the select
+transistors sit correctly inside it. The non-monotonicity is entirely in the
+unnamed remainder, which falls from $86.70$ to $17.75$\,mm² as the cell grows.
+
+\textbf{The remainder was measured, and it is not the global blocks.} Reading
+\texttt{ChipCalculateArea}, the chip figure is a sum of tile areas plus global
+blocks, so there were two candidates: whitespace inside the per-tile footprint,
+or the globals themselves. A print statement next to the global
+\texttt{CalculateArea} calls decides it. NeuroSim works in m² internally:
+
+\begin{center}\small
+\begin{tabular}{lrr}
+\toprule
+Global block & m² & mm² \\
+\midrule
+global buffer & $1.448\times10^{-6}$ & 1.4482 \\
+global bus    & $5.995\times10^{-6}$ & 5.9950 \\
+global accumulation & $2.643\times10^{-7}$ & 0.2643 \\
+max pooling   & $7.515\times10^{-9}$ & 0.0075 \\
+global ReLU   & $1.139\times10^{-8}$ & 0.0114 \\
+H-tree, sigmoid & 0 & 0 \\
+\midrule
+Total         &                      & \textbf{7.7264} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Against a residual of $86.70$\,mm², the globals account for $8.9\%$. Most of
+even that is already inside the named lines: \texttt{areaResults} adds the
+global buffer, pooling and activation units into the reported ``other
+peripheries'', and global accumulation into ``accumulation''.
+
+\textbf{So $78.97$\,mm², $65.6\%$ of the chip, sits inside the per-tile areas
+without appearing in any printed component sum.} The tile footprint is a
+bounding box over its subarrays and peripherals, and at FP2 the arrays are far
+too small to fill it. That is the whitespace, and it is why the total moves
+when only the cell width changes.
+
+\begin{keybox}{A units trap worth remembering}
+The print returned \texttt{1.448171e-06}. Read as \textmu m² that is
+essentially zero and the globals look irrelevant; read correctly as m² it is
+$1.45$\,mm². NeuroSim's internals are SI throughout while its report is in
+\textmu m², and the conversion is where a factor of $10^{12}$ hides. Check the
+magnitude against something known --- here, a chip of $120$\,mm² --- before
+drawing any conclusion from a raw internal value.
+\end{keybox}
+
+\textbf{The practical conclusion does not depend on which it is.} On either
+reading the chip total moves with floorplan geometry rather than with the
+silicon being compared, so it is not a stable basis for comparing
+configurations whose cell dimensions differ.
+
+\textbf{Consequences for what may be claimed.} Use the named subtotal
+throughout, and say that is what is being used.
+
+\begin{center}\small
+\begin{tabular}{lrr}
+\toprule
+Claim & On chip total & \textbf{On named area} \\
+\midrule
+32 rows $\to$ 128 rows & $2.84\times$ & $\mathbf{2.24\times}$ \\
+ReRAM against SRAM CIM & $5.03\times$ worse & $\mathbf{1.48\times}$ worse \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The tile-height result survives, at a smaller and defensible margin; the
+closure fraction is roughly constant across the three heights ($22.0$, $22.5$,
+$28.0\%$), so the trend is not an artefact. The SRAM comparison changes
+character entirely: most of the apparent five-fold penalty was whitespace, not
+silicon. SRAM's own breakdown closes at $95.5\%$ because its cells are large
+enough to proportion the tile well --- which is a floorplanning difference, not
+a device one.
 \end{keybox}
 
 \begin{warnbox}{Two caveats on this comparison}

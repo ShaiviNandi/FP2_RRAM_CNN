@@ -3,7 +3,7 @@
 KCL summation validation using FIXED resistors at the already-calibrated
 values, instead of re-simulating the dynamic program-then-read sequence.
 
-WHY THIS PIVOT: the previous version tried to validate two different things
+WHY this PIVOT: the previous version tried to validate two different things
 at once -- (A) does KCL correctly sum N cells' currents, and (B) does
 sequential programming through a shared bitline correctly reach the
 intended resistance for each cell. (B) turned out to have real, still
@@ -24,9 +24,7 @@ revisited deliberately (likely as part of the sneak-path/IR-drop
 characterization step), not smuggled into this one.
 
 Usage:
-    python3 column_mac_kcl_only.py \
-        --weights 1.0 -1.0 0.5 -0.5 0.0 1.0 -0.5 0.5 \
-        --activations 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0
+    python3 column_mac_kcl_only.py         --weights 1.0 -1.0 0.5 -0.5 0.0 1.0 -0.5 0.5         --activations 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0
 """
 import argparse
 import subprocess

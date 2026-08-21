@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 """
 neurosim_area_breakdown.py
-================================================================================
 Component-wise chip area from a NeuroSim log, with the unaccounted remainder
 named rather than ignored.
 
-WHY
----
+Why:
 An area improvement cannot be argued from a total. It needs a breakdown that
 closes, and a second run to difference against.
 
-WHAT THE RESIDUAL IS
---------------------
+What the residual is:
 The printed components are accumulated over tiles. ChipCalculateArea in
 Chip.cpp adds further global-level blocks after the tile loop that have no
 corresponding print statement. On the V1.4 source:
@@ -25,25 +22,20 @@ corresponding print statement. On the V1.4 source:
 That list is not assumed. The source is scanned for every statement adding to
 the area accumulator, so the answer comes from the installed version.
 
-Measured on VGG-8 at 65 nm the named components reach 95.3% of the chip total,
-the remainder being the global blocks above.
+Closure depends on weight precision. On VGG-8 at 65 nm the named components
+reach 95.3% of the chip total at 8-bit weights but only 30.2% at FP2, where
+the arrays are small and the per-tile footprint is mostly unused.
 
-WHAT IT DOES
-------------
+What it does:
   1. scans Chip.cpp for every statement adding to the area accumulator
   2. parses a NeuroSim log for all area lines
   3. subtracts, and reports the residual
   4. with two or more logs, differences them component by component
 
-USAGE
------
+Usage:
     python3 neurosim_area_breakdown.py --log logs/b6_neurosim.log
-    python3 neurosim_area_breakdown.py \\
-        --log logs/baseline.log --log logs/proposed.log \\
-        --names "baseline B=32 8b,proposed B=128 6b"
-    python3 neurosim_area_breakdown.py --log logs/b6_neurosim.log \\
-        --src ~/DNN_NeuroSim_V1.4/Inference_pytorch/NeuroSIM/Chip.cpp
-================================================================================
+    python3 neurosim_area_breakdown.py         --log logs/baseline.log --log logs/proposed.log         --names "baseline B=32 8b,proposed B=128 6b"
+    python3 neurosim_area_breakdown.py --log logs/b6_neurosim.log         --src ~/DNN_NeuroSim_V1.4/Inference_pytorch/NeuroSIM/Chip.cpp
 """
 import argparse
 import os
@@ -95,19 +87,39 @@ def parse_log(path):
         if TOTAL_HINT.match(label):
             total, total_label = v, label
             break
-    if total is None and found:
-        # No label matched the total hint, so take the largest as the total and
-        # say so, rather than silently reporting a meaningless residual.
-        total_label, total = max(found.items(), key=lambda kv: kv[1])
-        print(f"  [note] no line matched a 'chip area' total; treating the "
-              f"largest, '{total_label}', as the total.")
-    parts = {k: v for k, v in found.items() if k != total_label}
 
     if not found:
-        print("  [warn] no area lines matched. Lines mentioning area/array:")
-        for ln in open(path, errors="replace"):
-            if "area" in ln.lower() or "array" in ln.lower():
-                print("   ", ln.strip()[:110])
+        print(f"  [FAIL] {path}: no area lines at all.")
+        return None, {}, unit or "um^2"
+
+    if total is None:
+        # A run that finishes but prints no chip-area total did not finish
+        # correctly. Substituting the largest component would produce a
+        # plausible-looking table from a failed run, which is worse than
+        # producing nothing.
+        print(f"  [FAIL] {path}: no chip-area total line.")
+        print(f"         {len(found)} component line(s) present, so the run")
+        print("         terminated before writing its summary. Numbers from")
+        print("         this log are not usable.")
+        for k, v in sorted(found.items(), key=lambda kv: -kv[1])[:6]:
+            print(f"           {k[:58]:<58}{v:>18,.0f}")
+        return None, {}, unit or "um^2"
+
+    parts = {k: v for k, v in found.items() if k != total_label}
+
+    # A component larger than the chip, or a subtotal far above the total,
+    # means overflow or a corrupted line rather than a real breakdown.
+    named = sum(parts.values())
+    over = [k for k, v in parts.items() if v > total * 1.001]
+    if over or named > total * 1.5:
+        print(f"  [FAIL] {path}: breakdown is inconsistent with the total.")
+        if over:
+            print(f"         component(s) larger than the whole chip: "
+                  f"{over[0][:60]}")
+        print(f"         named {named:,.0f} vs total {total:,.0f}. This is a")
+        print("         numerical failure inside the tool, not a parse error.")
+        return None, {}, unit or "um^2"
+
     return total, parts, unit or "um^2"
 
 
@@ -164,6 +176,9 @@ def main():
     print("=" * 78)
     total, parts, unit = parse_log(args.log[0])
     if total is None:
+        print()
+        print("  Nothing further can be reported from this log. Check the raw")
+        print("  NeuroSim output for the point at which it stopped.")
         sys.exit(1)
 
     w = max((len(k) for k in parts), default=10)
@@ -221,9 +236,15 @@ def main():
     for i, path in enumerate(args.log[1:], 1):
         t, p, _ = parse_log(path)
         if t is None:
-            print(f"  [warn] no area lines in {path}; skipped")
+            print(f"\n  [skipped] {path} -- see failure above.")
             continue
         runs.append((names[i] if i < len(names) else path, t, p))
+
+    if len(runs) < 2:
+        print()
+        print("  Fewer than two usable logs. No comparison produced.")
+        print("  Re-run the failed configuration before comparing.")
+        return
 
     print()
     print("=" * 78)
@@ -257,6 +278,26 @@ def main():
         print("  Attribute the change to the component that moved, not to the")
         print("  total. A total that falls while the array grows means the")
         print("  saving came from converters, not from density.")
+
+        # Two totals are only comparable if they are composed the same way. A
+        # run whose printed components cover 95% of its total and one where
+        # they cover 24% are describing different things, and differencing
+        # them silently mixes a measured quantity with an unexplained one.
+        rb = 1.0 - sum(base_parts.values()) / base_total
+        rt = 1.0 - sum(p.values()) / tot
+        if abs(rb - rt) > 0.10 or max(rb, rt) > 0.25:
+            print()
+            print(f"  [CAUTION] unnamed share: {rb*100:.1f}% in "
+                  f"{base_name}, {rt*100:.1f}% here.")
+            print("  The ratio above therefore mixes named area with an")
+            print("  unexplained remainder. Compare the named components,")
+            print("  which are directly reported, and treat the total as")
+            print("  provisional.")
+            print()
+            print("  The unnamed share grows as weight precision falls: the")
+            print("  global buffer, H-tree and pooling units are sized by")
+            print("  activations and tile count, not by bits per weight, so")
+            print("  they do not shrink when the arrays do.")
 
 
 if __name__ == "__main__":

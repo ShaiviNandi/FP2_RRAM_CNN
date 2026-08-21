@@ -1,0 +1,1176 @@
+nohup: ignoring input
+
+>>> b4 : level-mapping error
+   | R_LRS=542.8  R_MID=1099.8  R_HRS=218587.2
+   | on/off ratio        402.7
+   | R_MID / R_LRS       2.0262   (should be exactly 2)
+   | 
+   |   level     ideal      actual    error %
+   | ----------------------------------------
+   |    +1.0    1.0000     1.00000     +0.000
+   |    +0.5    0.5000     0.49228     -1.543
+   |     0.0    0.0000     0.00000     +0.000
+   | ----------------------------------------
+   | worst level error   1.543%
+   | 
+   | Fix A: trim R_MID at programming time.
+   |         target R_MID = 1082.91 ohm   (currently 1099.8)
+   |         i.e. a -1.54% trim
+   |         verified: trimmed level 0.5 lands at 0.500000000000
+   | Fix B: fold the measured ratio into the block scale -- zero hardware cost,
+   |        and it also absorbs any per-chip trim error.
+
+===============================================================
+>>> b5_selftest : wordline mesh solver self-test
+>>> python3 wordline_ir.py --self-test
+===============================================================
+   | ==============================================================
+   | SELF-TEST
+   | ==============================================================
+   |   [1] mesh(R_wire=0) vs shared-Rsense formula: 8.795e-08 relative
+   |   [2] per-column calibration recovers ideal:   8.795e-08 relative
+   |   [3] nonzero wire resistance changes result:  2.152e-01 relative
+   | 
+   | ==============================================================
+   | SELF-TEST PASSED
+   | ==============================================================
+<<< b5_selftest done in 1s
+
+===============================================================
+>>> b5_breakdown : interconnect parasitics, isolated one at a time
+>>> python3 wordline_ir.py --breakdown --tile-m 128 --tile-k 16 --out-csv wire_parasitics.csv
+===============================================================
+   | 
+   | Interconnect parasitic breakdown, M=128, K=16
+   | case                               raw err%   after col-calib%
+   | --------------------------------------------------------------
+   | ideal wires (sanity check)           71.309             0.0002
+   | wordline metal 0.1 ohm               71.405             0.3730
+   | wordline metal 0.5 ohm               71.780             1.8209
+   | wordline metal 1.0 ohm               72.236             3.5396
+   | wordline driver 25 ohm               75.288            14.9546
+   | wordline driver 50 ohm               78.298            25.3656
+   | wordline driver 100 ohm              82.442            39.3178
+   | bitline metal 0.1 ohm                76.019            17.3275
+   | bitline metal 0.5 ohm                84.825            49.0605
+   | bitline metal 1.0 ohm                89.114            63.9854
+   | all three, mid values                88.167            56.4318
+   | --------------------------------------------------------------
+   | The sanity row must be ~0 after calibration. Any row far above
+   | it is a parasitic the per-column constant does NOT model:
+   | it corrects R_SENSE loading only, and distributed wire
+   | resistance is not a single lumped term per column.
+   | 
+   | Wrote wire_parasitics.csv
+<<< b5_breakdown done in 1s
+
+===============================================================
+>>> b5_scaling : wire parasitics vs tile height
+>>> python3 wordline_ir.py --sweep-m 32,64,128,256 --r-wl 0.5 --r-drv 50 --r-bl 0.5 --out-csv wordline_vs_m.csv
+===============================================================
+   |   solving M=32 ...
+   |   solving M=64 ...
+   |   solving M=128 ...
+   |   solving M=256 ...
+   | 
+   |  tile height    raw err%   col-calib%    col+row%
+   | -------------------------------------------------
+   |           32      57.712      35.8956     14.0611
+   |           64      70.080      40.6097     17.7312
+   |          128      87.815      55.8750     47.4445
+   |          256      91.563      62.8410     68.6505
+   | -------------------------------------------------
+   | 
+   | INTERPRETATION
+   |   raw err%    mesh solve against ideal, no correction
+   |   col-calib%  the project's per-column constant only
+   |   col+row%    plus a per-row gain FITTED on one activation pattern
+   |               and applied to unseen ones
+   | 
+   |   If col+row is far below col, the wordline error is largely a
+   |   compile-time constant and the contribution survives intact.
+   |   If col+row stays close to col, the residual is activation-
+   |   dependent and the claim must be narrowed to the bitline term.
+   | 
+   | Wrote wordline_vs_m.csv
+<<< b5_scaling done in 1s
+
+===============================================================
+>>> b1_variability : variability, 10 seeds, full test set
+>>> python3 analog_eval.py --sweep 32,64,128,256 --variability 0,0.05,0.1,0.2 --variability-seeds 10 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv variability.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === variability sweep: qat_b32.pth, B=32, 10000 images, 10 seed(s) per point ===
+   |   sigma= 0.0%  raw  79.07%   blind-calib  92.41%   write-verify  92.41%
+   |   sigma= 5.0%  raw  79.30%   blind-calib  92.31%   write-verify  92.30%
+   |   sigma=10.0%  raw  79.95%   blind-calib  92.18%   write-verify  92.19%
+   |   sigma=20.0%  raw  82.17%   blind-calib  91.51%   write-verify  91.36%
+   | 
+   | === variability sweep: qat_b64.pth, B=64, 10000 images, 10 seed(s) per point ===
+   |   sigma= 0.0%  raw  57.74%   blind-calib  92.27%   write-verify  92.27%
+   |   sigma= 5.0%  raw  58.23%   blind-calib  92.17%   write-verify  92.15%
+   |   sigma=10.0%  raw  59.57%   blind-calib  92.12%   write-verify  92.05%
+   |   sigma=20.0%  raw  63.65%   blind-calib  91.40%   write-verify  91.19%
+   | 
+   | === variability sweep: qat_b128.pth, B=128, 10000 images, 10 seed(s) per point ===
+   |   sigma= 0.0%  raw  11.61%   blind-calib  92.43%   write-verify  92.43%
+   |   sigma= 5.0%  raw  11.61%   blind-calib  92.46%   write-verify  92.45%
+   |   sigma=10.0%  raw  11.86%   blind-calib  92.33%   write-verify  92.30%
+   |   sigma=20.0%  raw  13.20%   blind-calib  91.63%   write-verify  91.27%
+   | 
+   | === variability sweep: qat_b256.pth, B=256, 10000 images, 10 seed(s) per point ===
+   |   sigma= 0.0%  raw  10.00%   blind-calib  92.01%   write-verify  92.01%
+   |   sigma= 5.0%  raw  10.00%   blind-calib  92.09%   write-verify  92.08%
+   |   sigma=10.0%  raw  10.03%   blind-calib  91.99%   write-verify  91.92%
+   |   sigma=20.0%  raw  10.15%   blind-calib  91.27%   write-verify  90.93%
+   | 
+   | ==============================================================================
+   | DOES THE GAIN CALIBRATION SURVIVE DEVICE VARIABILITY?
+   | ==============================================================================
+   |     B   sigma    raw %   blind %  w-verify %
+   | ------------------------------------------------------------------------------
+   |    32    0.0%    79.07     92.41       92.41
+   |    32    5.0%    79.30     92.31       92.30
+   |    32   10.0%    79.95     92.18       92.19
+   |    32   20.0%    82.17     91.51       91.36
+   |    64    0.0%    57.74     92.27       92.27
+   |    64    5.0%    58.23     92.17       92.15
+   |    64   10.0%    59.57     92.12       92.05
+   |    64   20.0%    63.65     91.40       91.19
+   |   128    0.0%    11.61     92.43       92.43
+   |   128    5.0%    11.61     92.46       92.45
+   |   128   10.0%    11.86     92.33       92.30
+   |   128   20.0%    13.20     91.63       91.27
+   |   256    0.0%    10.00     92.01       92.01
+   |   256    5.0%    10.00     92.09       92.08
+   |   256   10.0%    10.03     91.99       91.92
+   |   256   20.0%    10.15     91.27       90.93
+   | ------------------------------------------------------------------------------
+   | Blind calibration loses 0.90 pts going from sigma=0 to sigma=20%.
+   | Under a few points: the contribution stands as written -- the correction is
+   | computable at compile time from the programmed targets alone.
+   | Larger, but write-verify holds: the contribution becomes 'calibrate from measured
+   | conductances', which costs a read-back per cell.
+   | Neither holds: tile height is limited by device variability, not by the divider,
+   | and that is the paper instead.
+   | 
+   | Wrote variability.csv
+<<< b1_variability done in 30968s
+
+===============================================================
+>>> b1_figs : regenerate with error bars
+>>> python3 figures_sweeps.py --outdir paper/figures
+===============================================================
+   | /home/shaiv/.local/lib/python3.12/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+   |   warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+   | variability.csv: found   adc_sweep.csv: found   drift.csv: found
+   | 
+   |   wrote fig8_variability.pdf / .png
+   |   wrote fig9_variability_robustness.pdf / .png
+   |   wrote fig10_adc_resolution.pdf / .png
+   |   wrote fig11_adc_energy_projection.pdf / .png
+   |   wrote tab5_variability.tex
+   |   wrote tab6_adc.tex
+   |   wrote fig12_drift.pdf / .png
+   |   wrote fig13_drift_cost.pdf / .png
+   |   wrote tab8_drift.tex
+   |   wrote tab7_headline.tex
+   | 
+   | Worst stale-calibration point: B=32, t=1y, 65.17% vs 92.42% ceiling (-27.25 pts). Refresh recovers +26.70.
+   | 
+   | ADC bits required (within 1 pt of exact): {32: 6, 64: 6, 128: 6, 256: 6}
+<<< b1_figs done in 2s
+
+===============================================================
+>>> b3_nusigma_0.001 : drift at nu-sigma=0.001
+>>> python3 analog_eval.py --sweep 128 --drift 1,3600,86400,2592000,31536000 --nu-sigma 0.001 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv drift_nusigma_0.001.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.001, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1s  raw  11.80%   stale-calib  92.39%   recalibrated  92.23%   (ceiling 92.81%)
+   |   t=    1h  raw  10.04%   stale-calib  89.58%   recalibrated  92.06%   (ceiling 92.81%)
+   |   t=    1d  raw  10.01%   stale-calib  85.89%   recalibrated  92.16%   (ceiling 92.81%)
+   |   t=   1mo  raw  10.00%   stale-calib  78.94%   recalibrated  92.03%   (ceiling 92.81%)
+   |   t=    1y  raw  10.00%   stale-calib  71.52%   recalibrated  92.12%   (ceiling 92.81%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |   128      1s    11.80     92.39      92.23      92.81       -0.42
+   |   128      1h    10.04     89.58      92.06      92.81       -3.23
+   |   128      1d    10.01     85.89      92.16      92.81       -6.92
+   |   128     1mo    10.00     78.94      92.03      92.81      -13.87
+   |   128      1y    10.00     71.52      92.12      92.81      -21.29
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=128, t=1y, 71.52% vs 92.81% ceiling.
+   | Refreshing the constants there is worth +20.61 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_nusigma_0.001.csv
+<<< b3_nusigma_0.001 done in 1963s
+
+===============================================================
+>>> b3_nusigma_0.002 : drift at nu-sigma=0.002
+>>> python3 analog_eval.py --sweep 128 --drift 1,3600,86400,2592000,31536000 --nu-sigma 0.002 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv drift_nusigma_0.002.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.002, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1s  raw  11.80%   stale-calib  92.39%   recalibrated  92.23%   (ceiling 92.81%)
+   |   t=    1h  raw  10.04%   stale-calib  89.55%   recalibrated  92.11%   (ceiling 92.81%)
+   |   t=    1d  raw  10.02%   stale-calib  85.96%   recalibrated  92.10%   (ceiling 92.81%)
+   |   t=   1mo  raw  10.00%   stale-calib  78.90%   recalibrated  91.93%   (ceiling 92.81%)
+   |   t=    1y  raw  10.00%   stale-calib  71.53%   recalibrated  92.03%   (ceiling 92.81%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |   128      1s    11.80     92.39      92.23      92.81       -0.42
+   |   128      1h    10.04     89.55      92.11      92.81       -3.26
+   |   128      1d    10.02     85.96      92.10      92.81       -6.85
+   |   128     1mo    10.00     78.90      91.93      92.81      -13.91
+   |   128      1y    10.00     71.53      92.03      92.81      -21.28
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=128, t=1y, 71.53% vs 92.81% ceiling.
+   | Refreshing the constants there is worth +20.50 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_nusigma_0.002.csv
+<<< b3_nusigma_0.002 done in 1974s
+
+===============================================================
+>>> b3_nusigma_0.004 : drift at nu-sigma=0.004
+>>> python3 analog_eval.py --sweep 128 --drift 1,3600,86400,2592000,31536000 --nu-sigma 0.004 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv drift_nusigma_0.004.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1s  raw  11.80%   stale-calib  92.39%   recalibrated  92.23%   (ceiling 92.81%)
+   |   t=    1h  raw  10.03%   stale-calib  89.54%   recalibrated  92.02%   (ceiling 92.81%)
+   |   t=    1d  raw  10.01%   stale-calib  85.96%   recalibrated  91.92%   (ceiling 92.81%)
+   |   t=   1mo  raw  10.00%   stale-calib  79.15%   recalibrated  91.79%   (ceiling 92.81%)
+   |   t=    1y  raw  10.00%   stale-calib  71.73%   recalibrated  91.73%   (ceiling 92.81%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |   128      1s    11.80     92.39      92.23      92.81       -0.42
+   |   128      1h    10.03     89.54      92.02      92.81       -3.27
+   |   128      1d    10.01     85.96      91.92      92.81       -6.85
+   |   128     1mo    10.00     79.15      91.79      92.81      -13.66
+   |   128      1y    10.00     71.73      91.73      92.81      -21.08
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=128, t=1y, 71.73% vs 92.81% ceiling.
+   | Refreshing the constants there is worth +20.00 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_nusigma_0.004.csv
+<<< b3_nusigma_0.004 done in 2530s
+
+===============================================================
+>>> b3_nusigma_0.008 : drift at nu-sigma=0.008
+>>> python3 analog_eval.py --sweep 128 --drift 1,3600,86400,2592000,31536000 --nu-sigma 0.008 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv drift_nusigma_0.008.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.008, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1s  raw  11.80%   stale-calib  92.39%   recalibrated  92.23%   (ceiling 92.81%)
+   |   t=    1h  raw  10.04%   stale-calib  89.44%   recalibrated  91.81%   (ceiling 92.81%)
+   |   t=    1d  raw  10.01%   stale-calib  85.95%   recalibrated  91.56%   (ceiling 92.81%)
+   |   t=   1mo  raw  10.00%   stale-calib  79.73%   recalibrated  91.13%   (ceiling 92.81%)
+   |   t=    1y  raw  10.00%   stale-calib  73.36%   recalibrated  90.54%   (ceiling 92.81%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |   128      1s    11.80     92.39      92.23      92.81       -0.42
+   |   128      1h    10.04     89.44      91.81      92.81       -3.37
+   |   128      1d    10.01     85.95      91.56      92.81       -6.86
+   |   128     1mo    10.00     79.73      91.13      92.81      -13.08
+   |   128      1y    10.00     73.36      90.54      92.81      -19.45
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=128, t=1y, 73.36% vs 92.81% ceiling.
+   | Refreshing the constants there is worth +17.18 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_nusigma_0.008.csv
+<<< b3_nusigma_0.008 done in 2011s
+
+===============================================================
+>>> b3_nusigma_0.016 : drift at nu-sigma=0.016
+>>> python3 analog_eval.py --sweep 128 --drift 1,3600,86400,2592000,31536000 --nu-sigma 0.016 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv drift_nusigma_0.016.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.016, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1s  raw  11.80%   stale-calib  92.39%   recalibrated  92.23%   (ceiling 92.81%)
+   |   t=    1h  raw  10.05%   stale-calib  89.51%   recalibrated  90.78%   (ceiling 92.81%)
+   |   t=    1d  raw  10.02%   stale-calib  86.55%   recalibrated  89.26%   (ceiling 92.81%)
+   |   t=   1mo  raw  10.01%   stale-calib  82.12%   recalibrated  85.54%   (ceiling 92.81%)
+   |   t=    1y  raw  10.01%   stale-calib  77.91%   recalibrated  80.29%   (ceiling 92.81%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |   128      1s    11.80     92.39      92.23      92.81       -0.42
+   |   128      1h    10.05     89.51      90.78      92.81       -3.30
+   |   128      1d    10.02     86.55      89.26      92.81       -6.26
+   |   128     1mo    10.01     82.12      85.54      92.81      -10.69
+   |   128      1y    10.01     77.91      80.29      92.81      -14.90
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=128, t=1y, 77.91% vs 92.81% ceiling.
+   | Refreshing the constants there is worth +2.39 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_nusigma_0.016.csv
+<<< b3_nusigma_0.016 done in 1979s
+
+>>> b3 summary: stale-calibration cost against nu-sigma
+  nu_sigma       t      raw    stale  recalib  stale cost
+---------------------------------------------------------
+Traceback (most recent call last):
+  File "<stdin>", line 11, in <module>
+KeyError: 'stale_cost'
+
+===============================================================
+>>> b2_rsense_5 : drift vs tile height at R_s=5 ohm
+>>> python3 analog_eval.py --sweep 32,64,128,256 --drift 31536000 --r-sense 5 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv drift_rsense_5.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b32.pth, B=32, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.42%
+   |   t=    1y  raw  44.24%   stale-calib  60.86%   recalibrated  91.81%   (ceiling 92.42%)
+   | 
+   | === drift sweep: qat_b64.pth, B=64, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.47%
+   |   t=    1y  raw  40.45%   stale-calib  64.15%   recalibrated  91.68%   (ceiling 92.47%)
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1y  raw  17.66%   stale-calib  57.65%   recalibrated  91.53%   (ceiling 92.81%)
+   | 
+   | === drift sweep: qat_b256.pth, B=256, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.43%
+   |   t=    1y  raw  19.33%   stale-calib  65.60%   recalibrated  90.99%   (ceiling 92.43%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |    32      1y    44.24     60.86      91.81      92.42      -31.56
+   |    64      1y    40.45     64.15      91.68      92.47      -28.32
+   |   128      1y    17.66     57.65      91.53      92.81      -35.16
+   |   256      1y    19.33     65.60      90.99      92.43      -26.83
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=128, t=1y, 57.65% vs 92.81% ceiling.
+   | Refreshing the constants there is worth +33.88 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_rsense_5.csv
+<<< b2_rsense_5 done in 2635s
+
+===============================================================
+>>> b2_rsense_10 : drift vs tile height at R_s=10 ohm
+>>> python3 analog_eval.py --sweep 32,64,128,256 --drift 31536000 --r-sense 10 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv drift_rsense_10.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b32.pth, B=32, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.42%
+   |   t=    1y  raw  31.02%   stale-calib  62.95%   recalibrated  91.77%   (ceiling 92.42%)
+   | 
+   | === drift sweep: qat_b64.pth, B=64, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.47%
+   |   t=    1y  raw  26.11%   stale-calib  67.03%   recalibrated  91.64%   (ceiling 92.47%)
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1y  raw  10.38%   stale-calib  63.38%   recalibrated  91.62%   (ceiling 92.81%)
+   | 
+   | === drift sweep: qat_b256.pth, B=256, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.43%
+   |   t=    1y  raw  10.20%   stale-calib  71.86%   recalibrated  91.27%   (ceiling 92.43%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |    32      1y    31.02     62.95      91.77      92.42      -29.47
+   |    64      1y    26.11     67.03      91.64      92.47      -25.44
+   |   128      1y    10.38     63.38      91.62      92.81      -29.43
+   |   256      1y    10.20     71.86      91.27      92.43      -20.57
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=32, t=1y, 62.95% vs 92.42% ceiling.
+   | Refreshing the constants there is worth +28.81 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_rsense_10.csv
+<<< b2_rsense_10 done in 2628s
+
+===============================================================
+>>> b2_rsense_20 : drift vs tile height at R_s=20 ohm
+>>> python3 analog_eval.py --sweep 32,64,128,256 --drift 31536000 --r-sense 20 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv drift_rsense_20.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b32.pth, B=32, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.42%
+   |   t=    1y  raw  14.66%   stale-calib  66.73%   recalibrated  91.75%   (ceiling 92.42%)
+   | 
+   | === drift sweep: qat_b64.pth, B=64, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.47%
+   |   t=    1y  raw  12.80%   stale-calib  71.91%   recalibrated  91.69%   (ceiling 92.47%)
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1y  raw  10.00%   stale-calib  71.73%   recalibrated  91.73%   (ceiling 92.81%)
+   | 
+   | === drift sweep: qat_b256.pth, B=256, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.43%
+   |   t=    1y  raw  10.00%   stale-calib  79.55%   recalibrated  91.37%   (ceiling 92.43%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |    32      1y    14.66     66.73      91.75      92.42      -25.69
+   |    64      1y    12.80     71.91      91.69      92.47      -20.56
+   |   128      1y    10.00     71.73      91.73      92.81      -21.08
+   |   256      1y    10.00     79.55      91.37      92.43      -12.88
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=32, t=1y, 66.73% vs 92.42% ceiling.
+   | Refreshing the constants there is worth +25.03 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_rsense_20.csv
+<<< b2_rsense_20 done in 2951s
+
+===============================================================
+>>> b2_rsense_40 : drift vs tile height at R_s=40 ohm
+>>> python3 analog_eval.py --sweep 32,64,128,256 --drift 31536000 --r-sense 40 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv drift_rsense_40.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b32.pth, B=32, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.42%
+   |   t=    1y  raw  10.01%   stale-calib  72.76%   recalibrated  91.71%   (ceiling 92.42%)
+   | 
+   | === drift sweep: qat_b64.pth, B=64, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.47%
+   |   t=    1y  raw  10.00%   stale-calib  78.80%   recalibrated  91.91%   (ceiling 92.47%)
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1y  raw  10.00%   stale-calib  80.63%   recalibrated  91.87%   (ceiling 92.81%)
+   | 
+   | === drift sweep: qat_b256.pth, B=256, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.43%
+   |   t=    1y  raw  10.00%   stale-calib  86.05%   recalibrated  91.46%   (ceiling 92.43%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |    32      1y    10.01     72.76      91.71      92.42      -19.66
+   |    64      1y    10.00     78.80      91.91      92.47      -13.67
+   |   128      1y    10.00     80.63      91.87      92.81      -12.18
+   |   256      1y    10.00     86.05      91.46      92.43       -6.38
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=32, t=1y, 72.76% vs 92.42% ceiling.
+   | Refreshing the constants there is worth +18.95 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_rsense_40.csv
+<<< b2_rsense_40 done in 3546s
+
+===============================================================
+>>> b2_rsense_80 : drift vs tile height at R_s=80 ohm
+>>> python3 analog_eval.py --sweep 32,64,128,256 --drift 31536000 --r-sense 80 --data-dir ./data --max-images 0 --adc-bits 6 --out-csv drift_rsense_80.csv
+===============================================================
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b32.pth, B=32, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.42%
+   |   t=    1y  raw  10.00%   stale-calib  80.39%   recalibrated  91.69%   (ceiling 92.42%)
+   | 
+   | === drift sweep: qat_b64.pth, B=64, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.47%
+   |   t=    1y  raw  10.00%   stale-calib  85.01%   recalibrated  91.78%   (ceiling 92.47%)
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1y  raw  10.00%   stale-calib  87.27%   recalibrated  91.86%   (ceiling 92.81%)
+   | 
+   | === drift sweep: qat_b256.pth, B=256, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.43%
+   |   t=    1y  raw  10.00%   stale-calib  89.54%   recalibrated  91.48%   (ceiling 92.43%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |    32      1y    10.00     80.39      91.69      92.42      -12.03
+   |    64      1y    10.00     85.01      91.78      92.47       -7.46
+   |   128      1y    10.00     87.27      91.86      92.81       -5.54
+   |   256      1y    10.00     89.54      91.48      92.43       -2.89
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=32, t=1y, 80.39% vs 92.42% ceiling.
+   | Refreshing the constants there is worth +11.30 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_rsense_80.csv
+<<< b2_rsense_80 done in 2699s
+   | using NeuroSim at /home/shaiv/DNN_NeuroSim_V1.4
+
+>>> b6 : verify the C++ device parameters actually took
+   | 344:	resistanceOn = 542.8; // 6e3;               // Ron resistance at Vr in the reported measurement data (need to recalculate below if considering the nonlinearity)
+   | 345:	resistanceOff = 218587.2;// 6e3*17;           // Roff resistance at Vr in the reported measurement dat (need to recalculate below if considering the nonlinearity)
+   | ^^ both must read 542.8 and 218587.2 with NO trailing multiplier
+
+===============================================================
+>>> b6_neurosim : NeuroSim at on/off ratio 403
+>>> python3 inference.py --dataset cifar10 --model VGG8 --mode WAGE --cellBit 2 --subArray 128 --ADCprecision 6 --onoffratio 403
+===============================================================
+   | /home/shaiv/DNN_NeuroSim_V1.4/Inference_pytorch/log/default/ADCprecision=6/batch_size=200/cellBit=2/dataset=cifar10/decreasing_lr=140,180/detect=0/grad_scale=8/inference=0/lr=0.01/mode=WAGE/model=VGG8/onoffratio=403.0/parallelRead=128/seed=117/subArray=128/t=0/target=0/v=0/vari=0.0/wl_activate=8/wl_error=8/wl_grad=8/wl_weight=8
+   | =================FLAGS==================
+   | dataset: cifar10
+   | model: VGG8
+   | mode: WAGE
+   | batch_size: 200
+   | epochs: 200
+   | grad_scale: 8
+   | seed: 117
+   | log_interval: 100
+   | test_interval: 1
+   | logdir: /home/shaiv/DNN_NeuroSim_V1.4/Inference_pytorch/log/default/ADCprecision=6/batch_size=200/cellBit=2/dataset=cifar10/decreasing_lr=140,180/detect=0/grad_scale=8/inference=0/lr=0.01/mode=WAGE/model=VGG8/onoffratio=403.0/parallelRead=128/seed=117/subArray=128/t=0/target=0/v=0/vari=0.0/wl_activate=8/wl_error=8/wl_grad=8/wl_weight=8
+   | lr: 0.01
+   | decreasing_lr: 140,180
+   | wl_weight: 8
+   | wl_grad: 8
+   | wl_activate: 8
+   | wl_error: 8
+   | inference: 0
+   | subArray: 128
+   | parallelRead: 128
+   | ADCprecision: 6
+   | cellBit: 2
+   | onoffratio: 403.0
+   | vari: 0.0
+   | t: 0
+   | v: 0
+   | detect: 0
+   | target: 0
+   | ========================================
+   | Building CIFAR-10 data loader with 1 workers
+   |   0%|          | 0.00/170M [00:00<?, ?B/s]  0%|          | 32.8k/170M [00:00<35:34, 79.8kB/s]  0%|          | 98.3k/170M [00:00<16:00, 177kB/s]   0%|          | 229k/170M [00:00<08:14, 344kB/s]   0%|          | 426k/170M [00:01<05:08, 551kB/s]  0%|          | 819k/170M [00:01<03:49, 740kB/s]  1%|          | 1.44M/170M [00:01<02:09, 1.31MB/s]  1%|▏         | 2.33M/170M [00:01<01:21, 2.06MB/s]  2%|▏         | 2.69M/170M [00:02<01:51, 1.51MB/s]  2%|▏         | 3.38M/170M [00:02<01:28, 1.89MB/s]  2%|▏         | 4.10M/170M [00:02<01:14, 2.24MB/s]  3%|▎         | 4.52M/170M [00:03<01:16, 2.16MB/s]  3%|▎         | 4.92M/170M [00:03<01:42, 1.61MB/s]  3%|▎         | 5.70M/170M [00:03<01:19, 2.07MB/s]  4%|▎         | 6.03M/170M [00:03<01:25, 1.93MB/s]  4%|▎         | 6.36M/170M [00:04<01:30, 1.82MB/s]  4%|▍         | 6.72M/170M [00:04<01:32, 1.78MB/s]  4%|▍         | 7.05M/170M [00:04<01:36, 1.70MB/s]  4%|▍         | 7.41M/170M [00:04<01:36, 1.69MB/s]  5%|▍         | 7.77M/170M [00:04<01:36, 1.68MB/s]  5%|▍         | 8.13M/170M [00:05<01:36, 1.68MB/s]  5%|▍         | 8.49M/170M [00:05<01:36, 1.67MB/s]  5%|▌         | 8.85M/170M [00:05<01:22, 1.95MB/s]  5%|▌         | 9.08M/170M [00:05<01:25, 1.88MB/s]  5%|▌         | 9.31M/170M [00:05<01:38, 1.64MB/s]  6%|▌         | 9.60M/170M [00:06<01:42, 1.58MB/s]  6%|▌         | 9.99M/170M [00:06<01:37, 1.65MB/s]  6%|▌         | 10.4M/170M [00:06<01:21, 1.96MB/s]  6%|▌         | 10.6M/170M [00:06<01:26, 1.84MB/s]  6%|▋         | 10.8M/170M [00:06<01:36, 1.65MB/s]  7%|▋         | 11.1M/170M [00:06<01:38, 1.62MB/s]  7%|▋         | 11.5M/170M [00:07<01:20, 1.97MB/s]  7%|▋         | 11.7M/170M [00:07<01:26, 1.84MB/s]  7%|▋         | 12.0M/170M [00:07<01:36, 1.65MB/s]  7%|▋         | 12.3M/170M [00:07<01:37, 1.62MB/s]  7%|▋         | 12.6M/170M [00:07<01:20, 1.97MB/s]  8%|▊         | 12.9M/170M [00:07<01:25, 1.84MB/s]  8%|▊         | 13.1M/170M [00:08<01:36, 1.63MB/s]  8%|▊         | 13.4M/170M [00:08<01:37, 1.62MB/s]  8%|▊         | 13.8M/170M [00:08<01:18, 1.99MB/s]  8%|▊         | 14.0M/170M [00:08<01:25, 1.83MB/s]  8%|▊         | 14.3M/170M [00:08<01:35, 1.63MB/s]  9%|▊         | 14.6M/170M [00:08<01:35, 1.62MB/s]  9%|▉         | 15.0M/170M [00:09<01:32, 1.68MB/s]  9%|▉         | 15.4M/170M [00:09<01:30, 1.71MB/s]  9%|▉         | 15.7M/170M [00:09<01:30, 1.72MB/s]  9%|▉         | 16.1M/170M [00:09<01:28, 1.75MB/s] 10%|▉         | 16.5M/170M [00:09<01:27, 1.76MB/s] 10%|▉         | 16.9M/170M [00:10<01:26, 1.78MB/s] 10%|█         | 17.3M/170M [00:10<01:25, 1.79MB/s] 10%|█         | 17.7M/170M [00:10<01:25, 1.80MB/s] 11%|█         | 18.1M/170M [00:10<01:24, 1.80MB/s] 11%|█         | 18.5M/170M [00:11<01:24, 1.81MB/s] 11%|█         | 18.9M/170M [00:11<01:11, 2.13MB/s] 11%|█         | 19.1M/170M [00:11<01:15, 1.99MB/s] 11%|█▏        | 19.4M/170M [00:11<01:25, 1.77MB/s] 12%|█▏        | 19.7M/170M [00:11<01:25, 1.77MB/s] 12%|█▏        | 20.1M/170M [00:11<01:10, 2.15MB/s] 12%|█▏        | 20.4M/170M [00:11<01:15, 2.00MB/s] 12%|█▏        | 20.6M/170M [00:12<01:25, 1.75MB/s] 12%|█▏        | 21.0M/170M [00:12<01:22, 1.81MB/s] 13%|█▎        | 21.4M/170M [00:12<01:20, 1.85MB/s] 13%|█▎        | 21.9M/170M [00:12<01:05, 2.27MB/s] 13%|█▎        | 22.1M/170M [00:12<01:09, 2.13MB/s] 13%|█▎        | 22.4M/170M [00:13<01:17, 1.90MB/s] 13%|█▎        | 22.8M/170M [00:13<01:02, 2.36MB/s] 14%|█▎        | 23.1M/170M [00:13<01:07, 2.19MB/s] 14%|█▎        | 23.4M/170M [00:13<01:15, 1.95MB/s] 14%|█▍        | 23.8M/170M [00:13<01:05, 2.25MB/s] 14%|█▍        | 24.1M/170M [00:13<01:03, 2.29MB/s] 14%|█▍        | 24.3M/170M [00:13<01:13, 1.98MB/s] 15%|█▍        | 24.8M/170M [00:14<00:56, 2.59MB/s] 15%|█▍        | 25.1M/170M [00:14<01:00, 2.41MB/s] 15%|█▍        | 25.4M/170M [00:14<01:08, 2.12MB/s] 15%|█▌        | 25.9M/170M [00:14<00:52, 2.77MB/s] 15%|█▌        | 26.2M/170M [00:14<00:55, 2.58MB/s] 16%|█▌        | 26.5M/170M [00:14<01:03, 2.25MB/s] 16%|█▌        | 27.1M/170M [00:14<00:48, 2.93MB/s] 16%|█▌        | 27.5M/170M [00:15<00:51, 2.76MB/s] 16%|█▋        | 27.8M/170M [00:15<00:59, 2.41MB/s] 17%|█▋        | 28.4M/170M [00:15<00:44, 3.16MB/s] 17%|█▋        | 28.8M/170M [00:15<00:47, 2.96MB/s] 17%|█▋        | 29.1M/170M [00:15<00:54, 2.60MB/s] 17%|█▋        | 29.8M/170M [00:15<00:45, 3.09MB/s] 18%|█▊        | 30.1M/170M [00:15<00:44, 3.18MB/s] 18%|█▊        | 30.5M/170M [00:16<00:50, 2.78MB/s] 18%|█▊        | 31.2M/170M [00:16<00:37, 3.72MB/s] 19%|█▊        | 31.7M/170M [00:16<00:42, 3.30MB/s] 19%|█▉        | 32.0M/170M [00:16<00:45, 3.02MB/s] 19%|█▉        | 32.6M/170M [00:16<00:38, 3.56MB/s] 19%|█▉        | 33.0M/170M [00:16<00:41, 3.31MB/s] 20%|█▉        | 33.7M/170M [00:16<00:34, 4.02MB/s] 20%|██        | 34.1M/170M [00:19<04:20, 524kB/s]  20%|██        | 34.6M/170M [00:19<03:11, 710kB/s] 21%|██        | 35.3M/170M [00:20<02:10, 1.04MB/s] 21%|██        | 35.7M/170M [00:20<01:48, 1.24MB/s] 21%|██▏       | 36.4M/170M [00:20<01:17, 1.74MB/s] 22%|██▏       | 36.9M/170M [00:20<01:06, 2.02MB/s] 22%|██▏       | 37.6M/170M [00:20<00:54, 2.44MB/s] 22%|██▏       | 38.3M/170M [00:20<00:41, 3.16MB/s] 23%|██▎       | 38.8M/170M [00:20<00:40, 3.28MB/s] 23%|██▎       | 39.6M/170M [00:20<00:32, 4.06MB/s] 24%|██▎       | 40.1M/170M [00:21<00:32, 4.06MB/s] 24%|██▍       | 40.9M/170M [00:21<00:27, 4.76MB/s] 24%|██▍       | 41.5M/170M [00:21<00:27, 4.62MB/s] 25%|██▍       | 42.1M/170M [00:21<00:28, 4.58MB/s] 25%|██▌       | 42.9M/170M [00:21<00:24, 5.30MB/s] 26%|██▌       | 43.5M/170M [00:21<00:25, 4.97MB/s] 26%|██▌       | 44.3M/170M [00:21<00:21, 5.82MB/s] 26%|██▋       | 45.0M/170M [00:21<00:23, 5.42MB/s] 27%|██▋       | 45.8M/170M [00:22<00:20, 6.18MB/s] 27%|██▋       | 46.5M/170M [00:22<00:21, 5.80MB/s] 28%|██▊       | 47.3M/170M [00:22<00:19, 6.39MB/s] 28%|██▊       | 48.0M/170M [00:22<00:19, 6.18MB/s] 29%|██▊       | 48.9M/170M [00:22<00:17, 6.84MB/s] 29%|██▉       | 49.6M/170M [00:22<00:18, 6.44MB/s] 30%|██▉       | 50.6M/170M [00:22<00:17, 6.71MB/s] 30%|███       | 51.4M/170M [00:22<00:16, 7.04MB/s] 31%|███       | 52.2M/170M [00:22<00:16, 7.07MB/s] 31%|███       | 53.1M/170M [00:23<00:15, 7.41MB/s] 32%|███▏      | 53.9M/170M [00:23<00:15, 7.47MB/s] 32%|███▏      | 54.7M/170M [00:23<00:15, 7.48MB/s] 33%|███▎      | 55.7M/170M [00:23<00:14, 8.10MB/s] 33%|███▎      | 56.5M/170M [00:23<00:14, 7.62MB/s] 34%|███▎      | 57.5M/170M [00:23<00:13, 8.33MB/s] 34%|███▍      | 58.4M/170M [00:23<00:14, 7.95MB/s] 35%|███▍      | 59.5M/170M [00:23<00:12, 8.70MB/s] 35%|███▌      | 60.4M/170M [00:24<00:18, 5.88MB/s] 37%|███▋      | 62.5M/170M [00:24<00:11, 9.10MB/s] 37%|███▋      | 63.6M/170M [00:24<00:19, 5.46MB/s] 38%|███▊      | 65.1M/170M [00:24<00:15, 6.75MB/s] 39%|███▉      | 66.1M/170M [00:24<00:14, 6.99MB/s] 39%|███▉      | 67.0M/170M [00:25<00:16, 6.23MB/s] 40%|███▉      | 67.9M/170M [00:25<00:18, 5.66MB/s] 40%|████      | 68.6M/170M [00:25<00:19, 5.20MB/s] 41%|████      | 69.4M/170M [00:25<00:20, 4.99MB/s] 41%|████      | 70.2M/170M [00:25<00:17, 5.66MB/s] 42%|████▏     | 70.9M/170M [00:25<00:19, 5.14MB/s] 42%|████▏     | 71.6M/170M [00:26<00:20, 4.90MB/s] 42%|████▏     | 72.5M/170M [00:26<00:17, 5.65MB/s] 43%|████▎     | 73.1M/170M [00:26<00:18, 5.16MB/s] 43%|████▎     | 73.9M/170M [00:26<00:19, 4.97MB/s] 44%|████▍     | 74.7M/170M [00:26<00:16, 5.74MB/s] 44%|████▍     | 75.4M/170M [00:26<00:18, 5.22MB/s] 45%|████▍     | 76.3M/170M [00:26<00:18, 5.10MB/s] 45%|████▌     | 77.1M/170M [00:27<00:16, 5.74MB/s] 46%|████▌     | 77.7M/170M [00:27<00:17, 5.23MB/s] 46%|████▌     | 78.5M/170M [00:27<00:15, 5.98MB/s] 46%|████▋     | 79.2M/170M [00:27<00:16, 5.49MB/s] 47%|████▋     | 79.8M/170M [00:27<00:17, 5.16MB/s] 47%|████▋     | 80.6M/170M [00:27<00:15, 5.73MB/s] 48%|████▊     | 81.2M/170M [00:27<00:16, 5.31MB/s] 48%|████▊     | 82.1M/170M [00:27<00:14, 6.16MB/s] 49%|████▊     | 82.8M/170M [00:28<00:16, 5.47MB/s] 49%|████▉     | 83.5M/170M [00:28<00:16, 5.28MB/s] 49%|████▉     | 84.3M/170M [00:28<00:14, 5.87MB/s] 50%|████▉     | 84.9M/170M [00:28<00:15, 5.43MB/s] 50%|█████     | 85.7M/170M [00:28<00:13, 6.11MB/s] 51%|█████     | 86.4M/170M [00:28<00:15, 5.55MB/s] 51%|█████     | 87.2M/170M [00:28<00:15, 5.42MB/s] 52%|█████▏    | 88.0M/170M [00:28<00:13, 5.95MB/s] 52%|█████▏    | 88.6M/170M [00:29<00:15, 5.46MB/s] 52%|█████▏    | 89.5M/170M [00:29<00:13, 6.20MB/s] 53%|█████▎    | 90.1M/170M [00:29<00:14, 5.67MB/s] 53%|█████▎    | 90.9M/170M [00:29<00:14, 5.45MB/s] 54%|█████▍    | 91.8M/170M [00:29<00:13, 6.00MB/s] 54%|█████▍    | 92.4M/170M [00:29<00:13, 5.59MB/s] 55%|█████▍    | 93.3M/170M [00:29<00:12, 6.28MB/s] 55%|█████▌    | 93.9M/170M [00:30<00:13, 5.73MB/s] 56%|█████▌    | 94.7M/170M [00:30<00:13, 5.47MB/s] 56%|█████▌    | 95.5M/170M [00:30<00:12, 6.04MB/s] 56%|█████▋    | 96.1M/170M [00:30<00:13, 5.51MB/s] 57%|█████▋    | 97.0M/170M [00:30<00:11, 6.38MB/s] 57%|█████▋    | 97.7M/170M [00:30<00:12, 5.77MB/s] 58%|█████▊    | 98.4M/170M [00:30<00:12, 5.60MB/s] 58%|█████▊    | 99.2M/170M [00:30<00:11, 6.07MB/s] 59%|█████▊    | 99.8M/170M [00:31<00:12, 5.54MB/s] 59%|█████▉    | 101M/170M [00:31<00:11, 6.26MB/s]  59%|█████▉    | 101M/170M [00:31<00:11, 5.80MB/s] 60%|█████▉    | 102M/170M [00:31<00:12, 5.67MB/s] 60%|██████    | 103M/170M [00:31<00:11, 5.86MB/s] 61%|██████    | 103M/170M [00:31<00:11, 5.72MB/s] 61%|██████    | 104M/170M [00:31<00:11, 5.91MB/s] 61%|██████▏   | 105M/170M [00:31<00:11, 5.76MB/s] 62%|██████▏   | 105M/170M [00:31<00:10, 6.03MB/s] 62%|██████▏   | 106M/170M [00:32<00:11, 5.75MB/s] 63%|██████▎   | 107M/170M [00:32<00:10, 6.13MB/s] 63%|██████▎   | 107M/170M [00:32<00:11, 5.70MB/s] 63%|██████▎   | 108M/170M [00:32<00:10, 6.20MB/s] 64%|██████▍   | 109M/170M [00:32<00:10, 5.81MB/s] 64%|██████▍   | 110M/170M [00:32<00:09, 6.35MB/s] 65%|██████▍   | 110M/170M [00:32<00:10, 5.88MB/s] 65%|██████▌   | 111M/170M [00:32<00:10, 5.86MB/s] 65%|██████▌   | 112M/170M [00:33<00:09, 5.93MB/s] 66%|██████▌   | 112M/170M [00:33<00:10, 5.72MB/s] 66%|██████▌   | 113M/170M [00:33<00:09, 5.94MB/s] 67%|██████▋   | 114M/170M [00:33<00:09, 5.74MB/s] 67%|██████▋   | 114M/170M [00:33<00:09, 5.96MB/s] 67%|██████▋   | 115M/170M [00:33<00:09, 5.84MB/s] 68%|██████▊   | 115M/170M [00:33<00:09, 6.02MB/s] 68%|██████▊   | 116M/170M [00:33<00:09, 5.88MB/s] 68%|██████▊   | 117M/170M [00:33<00:08, 6.05MB/s] 69%|██████▉   | 117M/170M [00:33<00:09, 5.84MB/s] 69%|██████▉   | 118M/170M [00:34<00:08, 6.21MB/s] 70%|██████▉   | 119M/170M [00:34<00:08, 5.83MB/s] 70%|███████   | 120M/170M [00:34<00:08, 6.34MB/s] 70%|███████   | 120M/170M [00:34<00:08, 5.87MB/s] 71%|███████   | 121M/170M [00:34<00:07, 6.55MB/s] 71%|███████▏  | 122M/170M [00:34<00:08, 5.94MB/s] 72%|███████▏  | 122M/170M [00:34<00:08, 5.88MB/s] 72%|███████▏  | 123M/170M [00:34<00:07, 6.01MB/s] 73%|███████▎  | 124M/170M [00:35<00:07, 5.86MB/s] 73%|███████▎  | 124M/170M [00:35<00:07, 6.11MB/s] 73%|███████▎  | 125M/170M [00:35<00:07, 5.86MB/s] 74%|███████▎  | 126M/170M [00:35<00:07, 6.13MB/s] 74%|███████▍  | 126M/170M [00:35<00:07, 5.99MB/s] 74%|███████▍  | 127M/170M [00:35<00:07, 6.21MB/s] 75%|███████▍  | 128M/170M [00:35<00:07, 5.98MB/s] 75%|███████▌  | 128M/170M [00:35<00:06, 6.40MB/s] 76%|███████▌  | 129M/170M [00:35<00:06, 5.94MB/s] 76%|███████▌  | 130M/170M [00:36<00:06, 6.59MB/s] 77%|███████▋  | 131M/170M [00:36<00:06, 6.09MB/s] 77%|███████▋  | 132M/170M [00:36<00:06, 6.14MB/s] 78%|███████▊  | 132M/170M [00:36<00:05, 6.47MB/s] 78%|███████▊  | 133M/170M [00:36<00:06, 6.19MB/s] 78%|███████▊  | 134M/170M [00:36<00:05, 6.45MB/s] 79%|███████▉  | 134M/170M [00:36<00:05, 6.27MB/s] 79%|███████▉  | 135M/170M [00:36<00:05, 6.44MB/s] 80%|███████▉  | 136M/170M [00:36<00:05, 6.17MB/s] 80%|████████  | 136M/170M [00:37<00:05, 6.47MB/s] 80%|████████  | 137M/170M [00:37<00:05, 6.19MB/s] 81%|████████  | 138M/170M [00:37<00:05, 6.44MB/s] 81%|████████  | 138M/170M [00:37<00:05, 6.17MB/s] 82%|████████▏ | 139M/170M [00:37<00:04, 6.52MB/s] 82%|████████▏ | 140M/170M [00:37<00:04, 6.31MB/s] 83%|████████▎ | 141M/170M [00:37<00:04, 6.57MB/s] 83%|████████▎ | 141M/170M [00:37<00:04, 6.35MB/s] 83%|████████▎ | 142M/170M [00:37<00:04, 6.65MB/s] 84%|████████▍ | 143M/170M [00:38<00:04, 6.32MB/s] 84%|████████▍ | 144M/170M [00:38<00:03, 6.72MB/s] 85%|████████▍ | 144M/170M [00:38<00:04, 6.48MB/s] 85%|████████▌ | 145M/170M [00:38<00:03, 6.93MB/s] 86%|████████▌ | 146M/170M [00:38<00:03, 6.65MB/s] 86%|████████▌ | 147M/170M [00:38<00:03, 7.14MB/s] 86%|████████▋ | 147M/170M [00:38<00:03, 6.83MB/s] 87%|████████▋ | 148M/170M [00:38<00:03, 7.20MB/s] 87%|████████▋ | 149M/170M [00:38<00:03, 6.93MB/s] 88%|████████▊ | 150M/170M [00:39<00:02, 7.24MB/s] 88%|████████▊ | 151M/170M [00:39<00:02, 7.08MB/s] 89%|████████▉ | 151M/170M [00:39<00:02, 7.46MB/s] 89%|████████▉ | 152M/170M [00:39<00:02, 7.16MB/s] 90%|████████▉ | 153M/170M [00:39<00:02, 7.58MB/s] 90%|█████████ | 154M/170M [00:39<00:02, 7.17MB/s] 91%|█████████ | 155M/170M [00:39<00:02, 7.64MB/s] 91%|█████████▏| 156M/170M [00:39<00:02, 7.34MB/s] 92%|█████████▏| 157M/170M [00:39<00:01, 7.82MB/s] 92%|█████████▏| 157M/170M [00:40<00:01, 7.50MB/s] 93%|█████████▎| 158M/170M [00:40<00:01, 8.01MB/s] 93%|█████████▎| 159M/170M [00:40<00:01, 7.71MB/s] 94%|█████████▍| 160M/170M [00:40<00:01, 8.16MB/s] 94%|█████████▍| 161M/170M [00:40<00:01, 5.33MB/s] 96%|█████████▌| 163M/170M [00:40<00:00, 8.57MB/s] 96%|█████████▋| 164M/170M [00:40<00:00, 7.63MB/s] 97%|█████████▋| 165M/170M [00:41<00:00, 7.09MB/s] 97%|█████████▋| 166M/170M [00:41<00:00, 7.02MB/s] 98%|█████████▊| 167M/170M [00:41<00:00, 6.75MB/s] 98%|█████████▊| 167M/170M [00:41<00:00, 6.82MB/s] 99%|█████████▊| 168M/170M [00:41<00:00, 6.57MB/s] 99%|█████████▉| 169M/170M [00:41<00:00, 6.75MB/s]100%|█████████▉| 170M/170M [00:41<00:00, 6.56MB/s]100%|█████████▉| 170M/170M [00:41<00:00, 6.68MB/s]100%|██████████| 170M/170M [00:41<00:00, 4.07MB/s]
+   | fan_in     27, float_limit 0.333333, float std 0.272166, quant limit 0.9921875, scale 2.0
+   | fan_in   1152, float_limit 0.051031, float std 0.041667, quant limit 0.9921875, scale 16.0
+   | fan_in   1152, float_limit 0.051031, float std 0.041667, quant limit 0.9921875, scale 16.0
+   | fan_in   2304, float_limit 0.036084, float std 0.029463, quant limit 0.9921875, scale 16.0
+   | fan_in   2304, float_limit 0.036084, float std 0.029463, quant limit 0.9921875, scale 16.0
+   | fan_in   4608, float_limit 0.025516, float std 0.020833, quant limit 0.9921875, scale 32.0
+   | fan_in   8192, float_limit 0.019137, float std 0.015625, quant limit 0.9921875, scale 32.0
+   | fan_in   1024, float_limit 0.054127, float std 0.044194, quant limit 0.9921875, scale 16.0
+   | quantize layer  Conv0_
+   | quantize layer  Conv1_
+   | quantize layer  Conv3_
+   | quantize layer  Conv4_
+   | quantize layer  Conv6_
+   | quantize layer  Conv7_
+   | quantize layer  FC0_
+   | quantize layer  FC1_
+   | Test set: Average loss: 1.5865, Accuracy: 9025/10000 (90%)
+   | User assigned speed-up degree is larger than the upper bound (where no idle period during the whole process) 
+   | The speed-up degree is auto-assigned as the upper bound (where no idle period during the whole process) 
+   | ------------------------------ FloorPlan --------------------------------
+   | 
+   | Tile and PE size are optimized to maximize memory utilization ( = memory mapped by synapse / total memory on chip)
+   | 
+   | Desired Conventional Mapped Tile Storage Size: 1024x1024
+   | Desired Conventional PE Storage Size: 512x512
+   | Desired Novel Mapped Tile Storage Size: 9x512x512
+   | User-defined SubArray Size: 128x128
+   | 
+   | ----------------- # of tile used for each layer -----------------
+   | layer1: 2
+   | layer2: 8
+   | layer3: 4
+   | layer4: 8
+   | layer5: 8
+   | layer6: 8
+   | layer7: 64
+   | layer8: 1
+   | 
+   | ----------------- Speed-up of each layer ------------------
+   | layer1: 16
+   | layer2: 16
+   | layer3: 4
+   | layer4: 4
+   | layer5: 2
+   | layer6: 1
+   | layer7: 1
+   | layer8: 8
+   | 
+   | ----------------- Utilization of each layer ------------------
+   | layer1: 0.210938
+   | layer2: 1
+   | layer3: 1
+   | layer4: 1
+   | layer5: 1
+   | layer6: 1
+   | layer7: 1
+   | layer8: 0.625
+   | Memory Utilization of Whole Chip: 98.1038 % 
+   | 
+   | ---------------------------- FloorPlan Done ------------------------------
+   | 
+   | 
+   | 
+   | clkPeriod: 1.6974e-09
+   | -------------------------------------- Hardware Performance --------------------------------------
+   | -------------------- Estimation of Layer 1 ----------------------
+   | layer1's readLatency is: 132974ns
+   | layer1's readDynamicEnergy is: 1.25089e+06pJ
+   | layer1's leakagePower is: 6.86293uW
+   | layer1's leakageEnergy is: 912.591pJ
+   | layer1's buffer latency is: 104939ns
+   | layer1's buffer readDynamicEnergy is: 8031.1pJ
+   | layer1's ic latency is: 21319.1ns
+   | layer1's ic readDynamicEnergy is: 265670pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | ----------- ADC (or S/As and precharger for SRAM) readLatency is : 6110.66ns
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readLatency is : 434.96ns
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readLatency is : 126428ns
+   | ----------- ADC (or S/As and precharger for SRAM) readDynamicEnergy is : 731963pJ
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readDynamicEnergy is : 123824pJ
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readDynamicEnergy is : 395102pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | -------------------- Estimation of Layer 2 ----------------------
+   | layer2's readLatency is: 65070.7ns
+   | layer2's readDynamicEnergy is: 1.07038e+07pJ
+   | layer2's leakagePower is: 194.05uW
+   | layer2's leakageEnergy is: 25803.5pJ
+   | layer2's buffer latency is: 38873.3ns
+   | layer2's buffer readDynamicEnergy is: 66070.4pJ
+   | layer2's ic latency is: 15280.9ns
+   | layer2's ic readDynamicEnergy is: 1.13138e+06pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | ----------- ADC (or S/As and precharger for SRAM) readLatency is : 6110.66ns
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readLatency is : 3490.29ns
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readLatency is : 55469.7ns
+   | ----------- ADC (or S/As and precharger for SRAM) readDynamicEnergy is : 7.21008e+06pJ
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readDynamicEnergy is : 1.11589e+06pJ
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readDynamicEnergy is : 2.37785e+06pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | -------------------- Estimation of Layer 3 ----------------------
+   | layer3's readLatency is: 27663.9ns
+   | layer3's readDynamicEnergy is: 4.80536e+06pJ
+   | layer3's leakagePower is: 133.461uW
+   | layer3's leakageEnergy is: 17746.8pJ
+   | layer3's buffer latency is: 9273.14ns
+   | layer3's buffer readDynamicEnergy is: 28736.9pJ
+   | layer3's ic latency is: 12244.4ns
+   | layer3's ic readDynamicEnergy is: 499174pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | ----------- ADC (or S/As and precharger for SRAM) readLatency is : 5323.06ns
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readLatency is : 748.556ns
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readLatency is : 21592.2ns
+   | ----------- ADC (or S/As and precharger for SRAM) readDynamicEnergy is : 3.26551e+06pJ
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readDynamicEnergy is : 481486pJ
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readDynamicEnergy is : 1.05836e+06pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | -------------------- Estimation of Layer 4 ----------------------
+   | layer4's readLatency is: 31436.6ns
+   | layer4's readDynamicEnergy is: 8.09541e+06pJ
+   | layer4's leakagePower is: 269.49uW
+   | layer4's leakageEnergy is: 35835.2pJ
+   | layer4's buffer latency is: 13348.6ns
+   | layer4's buffer readDynamicEnergy is: 41564.3pJ
+   | layer4's ic latency is: 11293.3ns
+   | layer4's ic readDynamicEnergy is: 602672pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | ----------- ADC (or S/As and precharger for SRAM) readLatency is : 5323.06ns
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readLatency is : 897.927ns
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readLatency is : 25215.6ns
+   | ----------- ADC (or S/As and precharger for SRAM) readDynamicEnergy is : 5.55063e+06pJ
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readDynamicEnergy is : 965026pJ
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readDynamicEnergy is : 1.57976e+06pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | -------------------- Estimation of Layer 5 ----------------------
+   | layer5's readLatency is: 9051.58ns
+   | layer5's readDynamicEnergy is: 3.16293e+06pJ
+   | layer5's leakagePower is: 315.285uW
+   | layer5's leakageEnergy is: 41924.7pJ
+   | layer5's buffer latency is: 2727.9ns
+   | layer5's buffer readDynamicEnergy is: 15245.7pJ
+   | layer5's ic latency is: 4188.35ns
+   | layer5's ic readDynamicEnergy is: 223740pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | ----------- ADC (or S/As and precharger for SRAM) readLatency is : 1955.41ns
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readLatency is : 152.766ns
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readLatency is : 6943.4ns
+   | ----------- ADC (or S/As and precharger for SRAM) readDynamicEnergy is : 2.20642e+06pJ
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readDynamicEnergy is : 353944pJ
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readDynamicEnergy is : 602562pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | -------------------- Estimation of Layer 6 ----------------------
+   | layer6's readLatency is: 16639.8ns
+   | layer6's readDynamicEnergy is: 5.65956e+06pJ
+   | layer6's leakagePower is: 323.028uW
+   | layer6's leakageEnergy is: 42954.3pJ
+   | layer6's buffer latency is: 4488.96ns
+   | layer6's buffer readDynamicEnergy is: 24659.3pJ
+   | layer6's ic latency is: 7846.25ns
+   | layer6's ic readDynamicEnergy is: 302129pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | ----------- ADC (or S/As and precharger for SRAM) readLatency is : 3910.82ns
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readLatency is : 183.32ns
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readLatency is : 12545.7ns
+   | ----------- ADC (or S/As and precharger for SRAM) readDynamicEnergy is : 3.95098e+06pJ
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readDynamicEnergy is : 708262pJ
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readDynamicEnergy is : 1.00032e+06pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | -------------------- Estimation of Layer 7 ----------------------
+   | layer7's readLatency is: 740.493ns
+   | layer7's readDynamicEnergy is: 497040pJ
+   | layer7's leakagePower is: 984.936uW
+   | layer7's leakageEnergy is: 130971pJ
+   | layer7's buffer latency is: 446.417ns
+   | layer7's buffer readDynamicEnergy is: 2678.69pJ
+   | layer7's ic latency is: 176.954ns
+   | layer7's ic readDynamicEnergy is: 28393.4pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | ----------- ADC (or S/As and precharger for SRAM) readLatency is : 108.634ns
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readLatency is : 6.78962ns
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readLatency is : 625.069ns
+   | ----------- ADC (or S/As and precharger for SRAM) readDynamicEnergy is : 333715pJ
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readDynamicEnergy is : 70068.3pJ
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readDynamicEnergy is : 93257.3pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | -------------------- Estimation of Layer 8 ----------------------
+   | layer8's readLatency is: 412.57ns
+   | layer8's readDynamicEnergy is: 1472.65pJ
+   | layer8's leakagePower is: 15.4193uW
+   | layer8's leakageEnergy is: 2050.36pJ
+   | layer8's buffer latency is: 238.792ns
+   | layer8's buffer readDynamicEnergy is: 26.7948pJ
+   | layer8's ic latency is: 156.592ns
+   | layer8's ic readDynamicEnergy is: 647.999pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | ----------- ADC (or S/As and precharger for SRAM) readLatency is : 13.5792ns
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readLatency is : 1.90958ns
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readLatency is : 397.082ns
+   | ----------- ADC (or S/As and precharger for SRAM) readDynamicEnergy is : 508.897pJ
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readDynamicEnergy is : 145.912pJ
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readDynamicEnergy is : 817.843pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | ------------------------------ Summary --------------------------------
+   | 
+   | ChipArea : 8.00561e+07um^2
+   | Chip total CIM array : 2.10312e+07um^2
+   | Total IC Area on chip (Global and Tile/PE local): 1.21411e+07um^2
+   | Total ADC (or S/As and precharger for SRAM) Area on chip : 1.53844e+07um^2
+   | Total Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) on chip : 1.61775e+07um^2
+   | Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, pooling and activation units) : 1.15496e+07um^2
+   | 
+   | Chip clock period is: 1.6974ns
+   | Chip pipeline-system-clock-cycle (per image) is: 132974ns
+   | Chip pipeline-system readDynamicEnergy (per image) is: 3.41765e+07pJ
+   | Chip pipeline-system leakage Energy (per image) is: 298198pJ
+   | Chip pipeline-system leakage Power (per image) is: 2242.53uW
+   | Chip pipeline-system buffer readLatency (per image) is: 104939ns
+   | Chip pipeline-system buffer readDynamicEnergy (per image) is: 187013pJ
+   | Chip pipeline-system ic readLatency (per image) is: 21319.1ns
+   | Chip pipeline-system ic readDynamicEnergy (per image) is: 3.0538e+06pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | ----------- ADC (or S/As and precharger for SRAM) readLatency is : 6110.66ns
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readLatency is : 3490.29ns
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readLatency is : 126428ns
+   | ----------- ADC (or S/As and precharger for SRAM) readDynamicEnergy is : 2.32498e+07pJ
+   | ----------- Accumulation Circuits (subarray level: adders, shiftAdds; PE/Tile/Global level: accumulation units) readDynamicEnergy is : 3.81865e+06pJ
+   | ----------- Other Peripheries (e.g. decoders, mux, switchmatrix, buffers, IC, pooling and activation units) readDynamicEnergy is : 7.10803e+06pJ
+   | 
+   | ************************ Breakdown of Latency and Dynamic Energy *************************
+   | 
+   | 
+   | ----------------------------- Performance -------------------------------
+   | Energy Efficiency TOPS/W (Pipelined Process): 29.2882
+   | Throughput TOPS (Pipelined Process): 9.26374
+   | Throughput FPS (Pipelined Process): 7520.27
+   | Compute efficiency TOPS/mm^2 (Pipelined Process): 0.115716
+   | -------------------------------------- Hardware Performance Done --------------------------------------
+   | 
+   | ------------------------------ Simulation Performance --------------------------------
+   | Total Run-time of NeuroSim: 139 seconds
+   | ------------------------------ Simulation Performance --------------------------------
+<<< b6_neurosim done in 224s
+   | NOTE: this is VGG8, the reference numbers are ResNet-18 -- NOT like-for-like.
+   | Label it as such in the paper or port ResNet-18 into NeuroSim.
+
+>>> b7 : assumption sourcing -- ADC and cell area
+   | Three variants of each. Report all three; the spread IS the
+   | uncertainty, and hiding it behind one number is the problem.
+
+===============================================================
+>>> b7_default : baseline placeholders (current)
+>>> python3 hw_model.py --layers-csv bench_b128.csv --tile-m 128 --adc-bits 6 --power-csv ngspice_b128_summary.csv --report hw_adc_default.json
+===============================================================
+   | Loaded ngspice-measured array power for 19 layers.
+   |   NOTE: ngspice_full_sweep defaults to --tile-m 32. If that CSV was produced at a different tile height than the --tile-m 128 requested here, the array term is off by the cell-count ratio (4x). Re-run the sweep with --tile-m 128 to remove the caveat.
+   | 
+   | ============================================================================================
+   | FP2-E1M0 2T2R ReRAM ACCELERATOR -- AREA / POWER / DELAY
+   | tile 128x16   node 65 nm   ADC 6 bit   Rsense 20 ohm   Vread 0.10 V
+   | ============================================================================================
+   | 
+   | Layer                     tiles   util%  t_tile(ns)     E(nJ)    fJ/MAC   ADC%E  P_arr(uW)  src
+   | --------------------------------------------------------------------------------------------
+   | layer1.0.conv1               20    24.9       12.00      1.00      24.5    81.7     163.26  SIM
+   | layer1.0.conv2               20    27.4       12.00      1.00      24.4    81.9     156.20  SIM
+   | layer1.1.conv1               20    28.0       12.00      1.07      26.2    76.4     455.26  SIM
+   | layer1.1.conv2               20    29.0       12.00      0.99      24.1    82.9     103.35  SIM
+   | layer2.0.conv1               40    30.5       12.00      2.13      26.0    76.9     425.86  SIM
+   | layer2.0.conv2               72    31.1       12.00      3.57      24.2    82.7     115.93  SIM
+   | layer2.0.downsample.0         8    36.9       12.00      0.41      25.3    79.2     298.42  SIM
+   | layer2.1.conv1               72    32.1       12.00      3.74      25.3    78.9     312.35  SIM
+   | layer2.1.conv2               72    32.7       12.00      3.52      23.9    83.7      63.70  SIM
+   | layer3.0.conv1              144    28.9       12.00      7.66      26.0    77.0     418.96  SIM
+   | layer3.0.conv2              288    29.8       12.00     14.14      24.0    83.4      76.95  SIM
+   | layer3.0.downsample.0        16    28.1       12.00      0.84      25.7    77.9     367.72  SIM
+   | layer3.1.conv1              288    30.8       12.00     14.29      24.2    82.6     121.32  SIM
+   | layer3.1.conv2              288    34.4       12.00     14.00      23.7    84.3      37.14  SIM
+   | layer4.0.conv1              576    28.6       12.00     29.50      25.0    80.0     255.22  SIM
+   | layer4.0.conv2             1152    29.8       12.00     57.04      24.2    82.7     113.01  SIM
+   | layer4.0.downsample.0        64    34.1       12.00      3.33      25.4    78.7     324.30  SIM
+   | layer4.1.conv1             1152    30.1       12.00     59.55      25.2    79.2     294.54  SIM
+   | layer4.1.conv2             1152    34.9       12.00     56.58      24.0    83.4      79.41  SIM
+   | --------------------------------------------------------------------------------------------
+   | 
+   | DELAY   [MODEL]
+   |   bitline R_eff 8.15 ohm   C_bl 25.60 fF   tau 1.03 ps
+   |   settling 0.004 ns (0.0% of tile time)   ADC 12.000 ns
+   |   tile read 12.004 ns  ->  0.341 TOPS per tile
+   |   whole-network latency (K-tiles parallel, M-tiles serial): 2.94 us
+   | 
+   | AREA    [MODEL on ASSUM]
+   |   per tile: array 969 um2 (1.3%)   ADC 20000 um2 (26.5%)   DAC 51200 um2   psum 3200 um2
+   |   4096 ReRAM cells/tile, 4.0 ADC/tile (mux 8:1)
+   |   5464 tiles, all weights resident (fully weight-stationary) -> 411.817 mm2
+   |   A 412 mm2 die is not manufacturable at sane cost. Re-run with --physical-tiles to time-multiplex, or raise --tile-m.
+   | 
+   | ENERGY  [SIM array + MODEL periphery]
+   |   source: 19/19 layers with ngspice-measured array power
+   |   total 274.4 nJ for 11,157,504 MACs = 0.0246 pJ/MAC
+   |   ADC is 80.7% of energy on average
+   | 
+   | EFFICIENCY
+   |   7.59 TOPS   81.3 TOPS/W   0.02 TOPS/mm2
+   | ============================================================================================
+   | [SIM] measured by ngspice. [MODEL] closed form. [ASSUM] literature-typical placeholder -- replace with PDK data before publishing. Area and delay rest on [ASSUM]; the array power term does not.
+   | 
+   | Wrote hw_adc_default.json
+<<< b7_default done in 1s
+
+===============================================================
+>>> b7_neurosim : NeuroSim-sourced ADC and cell area
+>>> python3 hw_model.py --layers-csv bench_b128.csv --tile-m 128 --adc-bits 6 --power-csv ngspice_b128_summary.csv --set ADC_AREA_MM2=0.0012 --set CELL_AREA_F2=40 --report hw_adc_neurosim.json
+===============================================================
+   | Loaded ngspice-measured array power for 19 layers.
+   |   NOTE: ngspice_full_sweep defaults to --tile-m 32. If that CSV was produced at a different tile height than the --tile-m 128 requested here, the array term is off by the cell-count ratio (4x). Re-run the sweep with --tile-m 128 to remove the caveat.
+   | 
+   | ============================================================================================
+   | FP2-E1M0 2T2R ReRAM ACCELERATOR -- AREA / POWER / DELAY
+   | tile 128x16   node 65 nm   ADC 6 bit   Rsense 20 ohm   Vread 0.10 V
+   | ============================================================================================
+   | 
+   | Layer                     tiles   util%  t_tile(ns)     E(nJ)    fJ/MAC   ADC%E  P_arr(uW)  src
+   | --------------------------------------------------------------------------------------------
+   | layer1.0.conv1               20    24.9       12.00      1.00      24.5    81.7     163.26  SIM
+   | layer1.0.conv2               20    27.4       12.00      1.00      24.4    81.9     156.20  SIM
+   | layer1.1.conv1               20    28.0       12.00      1.07      26.2    76.4     455.26  SIM
+   | layer1.1.conv2               20    29.0       12.00      0.99      24.1    82.9     103.35  SIM
+   | layer2.0.conv1               40    30.5       12.00      2.13      26.0    76.9     425.86  SIM
+   | layer2.0.conv2               72    31.1       12.00      3.57      24.2    82.7     115.93  SIM
+   | layer2.0.downsample.0         8    36.9       12.00      0.41      25.3    79.2     298.42  SIM
+   | layer2.1.conv1               72    32.1       12.00      3.74      25.3    78.9     312.35  SIM
+   | layer2.1.conv2               72    32.7       12.00      3.52      23.9    83.7      63.70  SIM
+   | layer3.0.conv1              144    28.9       12.00      7.66      26.0    77.0     418.96  SIM
+   | layer3.0.conv2              288    29.8       12.00     14.14      24.0    83.4      76.95  SIM
+   | layer3.0.downsample.0        16    28.1       12.00      0.84      25.7    77.9     367.72  SIM
+   | layer3.1.conv1              288    30.8       12.00     14.29      24.2    82.6     121.32  SIM
+   | layer3.1.conv2              288    34.4       12.00     14.00      23.7    84.3      37.14  SIM
+   | layer4.0.conv1              576    28.6       12.00     29.50      25.0    80.0     255.22  SIM
+   | layer4.0.conv2             1152    29.8       12.00     57.04      24.2    82.7     113.01  SIM
+   | layer4.0.downsample.0        64    34.1       12.00      3.33      25.4    78.7     324.30  SIM
+   | layer4.1.conv1             1152    30.1       12.00     59.55      25.2    79.2     294.54  SIM
+   | layer4.1.conv2             1152    34.9       12.00     56.58      24.0    83.4      79.41  SIM
+   | --------------------------------------------------------------------------------------------
+   | 
+   | DELAY   [MODEL]
+   |   bitline R_eff 8.15 ohm   C_bl 25.60 fF   tau 1.03 ps
+   |   settling 0.004 ns (0.0% of tile time)   ADC 12.000 ns
+   |   tile read 12.004 ns  ->  0.341 TOPS per tile
+   |   whole-network latency (K-tiles parallel, M-tiles serial): 2.94 us
+   | 
+   | AREA    [MODEL on ASSUM]
+   |   per tile: array 969 um2 (1.6%)   ADC 4800 um2 (8.0%)   DAC 51200 um2   psum 3200 um2
+   |   4096 ReRAM cells/tile, 4.0 ADC/tile (mux 8:1)
+   |   5464 tiles, all weights resident (fully weight-stationary) -> 328.764 mm2
+   |   A 329 mm2 die is not manufacturable at sane cost. Re-run with --physical-tiles to time-multiplex, or raise --tile-m.
+   | 
+   | ENERGY  [SIM array + MODEL periphery]
+   |   source: 19/19 layers with ngspice-measured array power
+   |   total 274.4 nJ for 11,157,504 MACs = 0.0246 pJ/MAC
+   |   ADC is 80.7% of energy on average
+   | 
+   | EFFICIENCY
+   |   7.59 TOPS   81.3 TOPS/W   0.02 TOPS/mm2
+   | ============================================================================================
+   | [SIM] measured by ngspice. [MODEL] closed form. [ASSUM] literature-typical placeholder -- replace with PDK data before publishing. Area and delay rest on [ASSUM]; the array power term does not.
+   | 
+   | Wrote hw_adc_neurosim.json
+<<< b7_neurosim done in 0s
+
+===============================================================
+>>> b7_published : published 65nm SAR ADC
+>>> python3 hw_model.py --layers-csv bench_b128.csv --tile-m 128 --adc-bits 6 --power-csv ngspice_b128_summary.csv --set ADC_FOM_FJ_PER_CONV_STEP=9.5 --set ADC_AREA_MM2=0.0028 --report hw_adc_published.json
+===============================================================
+   | Loaded ngspice-measured array power for 19 layers.
+   |   NOTE: ngspice_full_sweep defaults to --tile-m 32. If that CSV was produced at a different tile height than the --tile-m 128 requested here, the array term is off by the cell-count ratio (4x). Re-run the sweep with --tile-m 128 to remove the caveat.
+   | 
+   | ============================================================================================
+   | FP2-E1M0 2T2R ReRAM ACCELERATOR -- AREA / POWER / DELAY
+   | tile 128x16   node 65 nm   ADC 6 bit   Rsense 20 ohm   Vread 0.10 V
+   | ============================================================================================
+   | 
+   | Layer                     tiles   util%  t_tile(ns)     E(nJ)    fJ/MAC   ADC%E  P_arr(uW)  src
+   | --------------------------------------------------------------------------------------------
+   | layer1.0.conv1               20    24.9       12.00      0.57      14.0    68.0     163.26  SIM
+   | layer1.0.conv2               20    27.4       12.00      0.57      13.9    68.2     156.20  SIM
+   | layer1.1.conv1               20    28.0       12.00      0.64      15.7    60.6     455.26  SIM
+   | layer1.1.conv2               20    29.0       12.00      0.56      13.6    69.7     103.35  SIM
+   | layer2.0.conv1               40    30.5       12.00      1.27      15.5    61.2     425.86  SIM
+   | layer2.0.conv2               72    31.1       12.00      2.02      13.7    69.4     115.93  SIM
+   | layer2.0.downsample.0         8    36.9       12.00      0.24      14.8    64.3     298.42  SIM
+   | layer2.1.conv1               72    32.1       12.00      2.19      14.8    64.0     312.35  SIM
+   | layer2.1.conv2               72    32.7       12.00      1.97      13.4    71.0      63.70  SIM
+   | layer3.0.conv1              144    28.9       12.00      4.56      15.5    61.4     418.96  SIM
+   | layer3.0.conv2              288    29.8       12.00      7.94      13.5    70.5      76.95  SIM
+   | layer3.0.downsample.0        16    28.1       12.00      0.50      15.2    62.6     367.72  SIM
+   | layer3.1.conv1              288    30.8       12.00      8.10      13.7    69.2     121.32  SIM
+   | layer3.1.conv2              288    34.4       12.00      7.81      13.2    71.8      37.14  SIM
+   | layer4.0.conv1              576    28.6       12.00     17.12      14.5    65.5     255.22  SIM
+   | layer4.0.conv2             1152    29.8       12.00     32.27      13.7    69.5     113.01  SIM
+   | layer4.0.downsample.0        64    34.1       12.00      1.96      14.9    63.7     324.30  SIM
+   | layer4.1.conv1             1152    30.1       12.00     34.78      14.7    64.4     294.54  SIM
+   | layer4.1.conv2             1152    34.9       12.00     31.81      13.5    70.5      79.41  SIM
+   | --------------------------------------------------------------------------------------------
+   | 
+   | DELAY   [MODEL]
+   |   bitline R_eff 8.15 ohm   C_bl 25.60 fF   tau 1.03 ps
+   |   settling 0.004 ns (0.0% of tile time)   ADC 12.000 ns
+   |   tile read 12.004 ns  ->  0.341 TOPS per tile
+   |   whole-network latency (K-tiles parallel, M-tiles serial): 2.94 us
+   | 
+   | AREA    [MODEL on ASSUM]
+   |   per tile: array 969 um2 (1.5%)   ADC 11200 um2 (16.8%)   DAC 51200 um2   psum 3200 um2
+   |   4096 ReRAM cells/tile, 4.0 ADC/tile (mux 8:1)
+   |   5464 tiles, all weights resident (fully weight-stationary) -> 363.734 mm2
+   |   A 364 mm2 die is not manufacturable at sane cost. Re-run with --physical-tiles to time-multiplex, or raise --tile-m.
+   | 
+   | ENERGY  [SIM array + MODEL periphery]
+   |   source: 19/19 layers with ngspice-measured array power
+   |   total 156.9 nJ for 11,157,504 MACs = 0.0141 pJ/MAC
+   |   ADC is 66.6% of energy on average
+   | 
+   | EFFICIENCY
+   |   7.59 TOPS   142.2 TOPS/W   0.02 TOPS/mm2
+   | ============================================================================================
+   | [SIM] measured by ngspice. [MODEL] closed form. [ASSUM] literature-typical placeholder -- replace with PDK data before publishing. Area and delay rest on [ASSUM]; the array power term does not.
+   | 
+   | Wrote hw_adc_published.json
+<<< b7_published done in 0s
+
+>>> b7 : weight-reuse curve (fixes the reuse=1 criticism)
+
+===============================================================
+>>> b7_reuse : weight-fetch advantage vs reuse
+>>> python3 codesign_sweep.py --baseline-only --reuse-sweep 1,2,5,10,50,100,1000
+===============================================================
+   | 
+   | ==============================================================================
+   | WEIGHT-FETCH TERM vs REUSE  -- the single most contested number
+   | ==============================================================================
+   |      reuse     SRAM fetch pJ/MAC     ReRAM   SRAM total adv.
+   | ------------------------------------------------------------------------------
+   |          1              0.100000       0.0          0.100000
+   |          2              0.050000       0.0          0.050000
+   |          5              0.020000       0.0          0.020000
+   |         10              0.010000       0.0          0.010000
+   |         50              0.002000       0.0          0.002000
+   |        100              0.001000       0.0          0.001000
+   |       1000              0.000100       0.0          0.000100
+   | ------------------------------------------------------------------------------
+   | The fetch advantage falls as 1/reuse. Quoting reuse=1 alone
+   | overstates the in-memory-compute case; quote the curve.
+   | 
+   | 
+   | ==============================================================================
+   | DIGITAL BASELINE -- 2T2R ReRAM vs 6T SRAM, 11,157,504 weights, 65 nm
+   | ==============================================================================
+   | 
+   | WEIGHT STORAGE AREA  [MODEL on ASSUM]
+   |   per weight   ReRAM 2T2R      0.3380 um2
+   |                SRAM  FP2 (2b)  1.1830 um2  -> ReRAM 3.5x denser
+   |   whole net    ReRAM           3.77 mm2
+   |                SRAM  FP2       13.20 mm2
+   |                SRAM  FP32      211.2 mm2  -> ReRAM 56x smaller
+   | 
+   | STANDBY  [MODEL on ASSUM -- leakage varies >10x with corner/temp]
+   |   SRAM holding 2.79 MB of FP2 weights: 2.68 mW, continuously, forever
+   |   ReRAM: 0.0 mW. Retention is a materials property, not a power draw.
+   | 
+   | WEIGHT MOVEMENT  [MODEL]
+   |   at reuse=1x  SRAM fetch 0.1000 pJ/MAC   ReRAM 0 pJ/MAC
+   |   (in-memory compute eliminates this term by construction; it is the whole point)
+   | 
+   | THE COST SIDE -- what ReRAM is bad at  [MODEL on ASSUM]
+   |   programming all 22,315,008 cells once: 2231.5 uJ, 2231.5 ms
+   |   A design that reloads tiles often pays this repeatedly. Any time-multiplexed
+   |   mapping (hw_model --physical-tiles) must amortize it or the comparison is dishonest.
+   | ==============================================================================
+<<< b7_reuse done in 0s
+
+   | Override the sourced values on the command line, e.g.
+   |   SAR_FOM=9.5 SAR_AREA_MM2=0.0028 bash run_blocking.sh b7
+
+All requested stages completed.

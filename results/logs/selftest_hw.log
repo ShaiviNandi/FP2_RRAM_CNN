@@ -1,0 +1,36 @@
+   | === hw_model self-test ===
+   | 
+   | [1] Dimensional sanity of the area model
+   |     F=65.0 nm -> 1 cell = 0.1690 um2 (40 F^2)
+   |     32x16 tile: 1024 cells, array 242.3 um2, total 36242.3 um2
+   |     array area matches hand calculation: True
+   | 
+   | [2] Delay: settling must scale with M, ADC term must not
+   |     M=  16  R_eff  16.02 ohm  C_bl   3.2 fF  settle 0.0004 ns  ADC 16.000 ns
+   |     M=  32  R_eff  13.36 ohm  C_bl   6.4 fF  settle 0.0008 ns  ADC 16.000 ns
+   |     M=  64  R_eff  10.03 ohm  C_bl  12.8 fF  settle 0.0018 ns  ADC 16.000 ns
+   |     M= 128  R_eff   6.69 ohm  C_bl  25.6 fF  settle 0.0055 ns  ADC 16.000 ns
+   |     settling grew with M: True
+   |     ADC time independent of M: True
+   | 
+   | [3] Energy: ADC share must fall as M grows (fixed cost, more MACs)
+   |     M=  16     649.4 fJ/MAC   ADC  98.6% of energy       3.1 TOPS/W
+   |     M=  32     326.3 fJ/MAC   ADC  98.1% of energy       6.1 TOPS/W
+   |     M=  64     164.7 fJ/MAC   ADC  97.2% of energy      12.1 TOPS/W
+   |     M= 128      83.9 fJ/MAC   ADC  95.3% of energy      23.8 TOPS/W
+   |     M= 256      43.5 fJ/MAC   ADC  91.9% of energy      46.0 TOPS/W
+   |     monotonic decrease: True
+   | 
+   | [4] Order-of-magnitude check against published analog CIM macros
+   |     this model: 6.1 TOPS/W at 8-bit ADC
+   |     published analog CIM macros mostly report 10-100 TOPS/W for low-bit
+   |     weights. In range: True
+   |     (In-range is a NECESSARY not sufficient check -- it catches unit errors,
+   |      it does not validate the ASSUM constants.)
+   | 
+   | [5] Energy conservation: components must sum to the total
+   |     sum of parts 167.0400 pJ vs total 167.0400 pJ
+   | 
+   | ============================================================
+   | SELF-TEST PASSED
+   | ============================================================

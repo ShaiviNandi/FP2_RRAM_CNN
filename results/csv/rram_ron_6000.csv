@@ -1,0 +1,2 @@
+cell,chip_area_um2,cim_array_um2,ic_area_um2,adc_area_um2,accum_area_um2,other_area_um2,latency_ns,dyn_energy_pj,leak_energy_pj,leak_power_uw,buffer_energy_pj,ic_energy_pj,tops_per_w,tops,fps,tops_per_mm2,accuracy_pct,req_tx_width_f,adc_energy_pj,accum_energy_pj,other_energy_pj
+rram,406999000.0,3605360.0,28647900.0,7949130.0,,52575300.0,179934.0,52662400.0,410151.0,2279.45,187013.0,7177170.0,19.0249,6.84604,5557.59,0.0168208,90.0,,31183800.0,,17659900.0

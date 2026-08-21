@@ -1,0 +1,40 @@
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b32.pth, B=32, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.42%
+   |   t=    1y  raw  10.00%   stale-calib  80.39%   recalibrated  91.69%   (ceiling 92.42%)
+   | 
+   | === drift sweep: qat_b64.pth, B=64, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.47%
+   |   t=    1y  raw  10.00%   stale-calib  85.01%   recalibrated  91.78%   (ceiling 92.47%)
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1y  raw  10.00%   stale-calib  87.27%   recalibrated  91.86%   (ceiling 92.81%)
+   | 
+   | === drift sweep: qat_b256.pth, B=256, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.43%
+   |   t=    1y  raw  10.00%   stale-calib  89.54%   recalibrated  91.48%   (ceiling 92.43%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |    32      1y    10.00     80.39      91.69      92.42      -12.03
+   |    64      1y    10.00     85.01      91.78      92.47       -7.46
+   |   128      1y    10.00     87.27      91.86      92.81       -5.54
+   |   256      1y    10.00     89.54      91.48      92.43       -2.89
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=32, t=1y, 80.39% vs 92.42% ceiling.
+   | Refreshing the constants there is worth +11.30 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | Wrote drift_rsense_80.csv

@@ -101,7 +101,7 @@ def main():
         bitlines = K
 
     g_lrs = 1.0 / cb.col.R_FOR_MAGNITUDE[1.0]
-    # Recover the analog result back into the SAME units as the digital
+    # Recover the analog result back into the same units as the digital
     # dot product (divide out the current->weighted-sum scale factor) --
     # this is what makes the comparison directly readable.
     analog_recovered = [g / (args.vread * g_lrs) for g in golden]

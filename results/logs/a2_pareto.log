@@ -1,0 +1,81 @@
+   | 
+   | ==============================================================================
+   | DIGITAL BASELINE -- 2T2R ReRAM vs 6T SRAM, 11,157,504 weights, 65 nm
+   | ==============================================================================
+   | 
+   | WEIGHT STORAGE AREA  [MODEL on ASSUM]
+   |   per weight   ReRAM 2T2R      0.3380 um2
+   |                SRAM  FP2 (2b)  1.1830 um2  -> ReRAM 3.5x denser
+   |   whole net    ReRAM           3.77 mm2
+   |                SRAM  FP2       13.20 mm2
+   |                SRAM  FP32      211.2 mm2  -> ReRAM 56x smaller
+   | 
+   | STANDBY  [MODEL on ASSUM -- leakage varies >10x with corner/temp]
+   |   SRAM holding 2.79 MB of FP2 weights: 2.68 mW, continuously, forever
+   |   ReRAM: 0.0 mW. Retention is a materials property, not a power draw.
+   | 
+   | WEIGHT MOVEMENT  [MODEL]
+   |   at reuse=1x  SRAM fetch 0.1000 pJ/MAC   ReRAM 0 pJ/MAC
+   |   (in-memory compute eliminates this term by construction; it is the whole point)
+   | 
+   | THE COST SIDE -- what ReRAM is bad at  [MODEL on ASSUM]
+   |   programming all 22,315,008 cells once: 2231.5 uJ, 2231.5 ms
+   |   A design that reloads tiles often pays this repeatedly. Any time-multiplexed
+   |   mapping (hw_model --physical-tiles) must amortize it or the comparison is dishonest.
+   | ==============================================================================
+   | 
+   | ==============================================================================
+   | BLOCK / TILE HEIGHT B = M = 32
+   | ==============================================================================
+   |   [1/3] QAT skipped, reusing qat_b32.pth
+   |   [2/3] Benchmark skipped, reusing bench_b32.csv
+   |   [3/3] Hardware model at tile_m=32
+   |     $ /usr/bin/python3 hw_model.py --layers-csv bench_b32.csv --tile-m 32 --tile-k 16 --report hw_b32.json --power-csv ngspice_b128_summary.csv --adc-bits 6.0
+   |       -> exit 0 in 0s, log appended to codesign_sweep.log
+   |   => acc_qat=92.62  snr_analog=10.975109555643991  TOPS/W=22.550264133396535
+   | 
+   | ==============================================================================
+   | BLOCK / TILE HEIGHT B = M = 64
+   | ==============================================================================
+   |   [1/3] QAT skipped, reusing qat_b64.pth
+   |   [2/3] Benchmark skipped, reusing bench_b64.csv
+   |   [3/3] Hardware model at tile_m=64
+   |     $ /usr/bin/python3 hw_model.py --layers-csv bench_b64.csv --tile-m 64 --tile-k 16 --report hw_b64.json --power-csv ngspice_b128_summary.csv --adc-bits 6.0
+   |       -> exit 0 in 0s, log appended to codesign_sweep.log
+   |   => acc_qat=92.51  snr_analog=8.762644405490406  TOPS/W=43.56537172268479
+   | 
+   | ==============================================================================
+   | BLOCK / TILE HEIGHT B = M = 128
+   | ==============================================================================
+   |   [1/3] QAT skipped, reusing qat_b128.pth
+   |   [2/3] Benchmark skipped, reusing bench_b128.csv
+   |   [3/3] Hardware model at tile_m=128
+   |     $ /usr/bin/python3 hw_model.py --layers-csv bench_b128.csv --tile-m 128 --tile-k 16 --report hw_b128.json --power-csv ngspice_b128_summary.csv --adc-bits 6.0
+   |       -> exit 0 in 0s, log appended to codesign_sweep.log
+   |   => acc_qat=92.74  snr_analog=6.782263274400145  TOPS/W=81.33117251324553
+   | 
+   | ==============================================================================
+   | BLOCK / TILE HEIGHT B = M = 256
+   | ==============================================================================
+   |   [1/3] QAT skipped, reusing qat_b256.pth
+   |   [2/3] Benchmark skipped, reusing bench_b256.csv
+   |   [3/3] Hardware model at tile_m=256
+   |     $ /usr/bin/python3 hw_model.py --layers-csv bench_b256.csv --tile-m 256 --tile-k 16 --report hw_b256.json --power-csv ngspice_b128_summary.csv --adc-bits 6.0
+   |       -> exit 0 in 0s, log appended to codesign_sweep.log
+   |   => acc_qat=92.51  snr_analog=5.083288961394793  TOPS/W=141.92441621633
+   | 
+   | ========================================================================================
+   | CO-DESIGN PARETO -- block size B is simultaneously the FP2 block and the crossbar tile height
+   | ========================================================================================
+   |   B=M  acc QAT%  vs FP32  SNR dig  SNR ana    gap   pJ/MAC   TOPS/W   ADC%E  area mm2
+   | ----------------------------------------------------------------------------------------
+   |    32     92.62    -0.59    13.65    10.98   2.67   0.0887     22.6    89.1   789.792
+   |    64     92.51    -0.10    12.37     8.76   3.61   0.0459     43.6    86.1   537.005
+   |   128     92.74    +0.13    11.43     6.78   4.64   0.0246     81.3    80.7   411.817
+   |   256     92.51    -0.09    10.49     5.08   5.41   0.0141    141.9    71.7   354.046
+   | ----------------------------------------------------------------------------------------
+   | B 32 -> 256:  accuracy -0.11 pts,  analog SNR -5.89 dB,  efficiency x6.3
+   | That trade is the paper. FP2 fixes B=32 for reasons that have nothing to do with
+   | analog readout; this table prices that choice in accuracy, SNR and TOPS/W at once.
+   | 
+   | Wrote codesign_pareto.csv

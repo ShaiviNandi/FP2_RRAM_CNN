@@ -4,14 +4,21 @@ __pycache__/
 .venv/
 venv/
 
-# datasets and checkpoints -- large, and regenerable
+# Datasets and checkpoints. Large and regenerable.
 data/
 *.pth
 *.pt
 *.ckpt
 
-# run artefacts
-logs/
+# Third-party papers. Downloaded under an institutional subscription and not
+# redistributable; INDEX.md records what each one supplies.
+references/
+!references/INDEX.md
+
+# Working copy of the simulation tree. Results are committed under results/.
+python/
+
+# Run artefacts
 sim/
 sim_export/
 vendor/
@@ -19,17 +26,24 @@ vendor/
 *.vcd
 *.raw
 *.out
+*.zip
 
-# generated results and figures; regenerate with make_figures.py
-paper/figures/
-*.csv
-!results_cifar_qat_deployed.csv
+# Scratch logs at the top level. Curated ones live under results/logs/.
+/logs/
 
 # LaTeX build products
 *.aux
-*.log
 *.toc
 *.synctex.gz
 *.fls
 *.fdb_latexmk
-*.out
+*.log
+!results/logs/*.log
+
+# Generated CSVs and figures are ignored where they are produced, and
+# committed once copied into results/ by sync_results.sh.
+*.csv
+paper/figures/
+!results/csv/*.csv
+!results/figures/*
+!results/json/*

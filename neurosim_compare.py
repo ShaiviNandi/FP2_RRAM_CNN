@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
 neurosim_compare.py
-================================================================================
 Runs NeuroSim twice on the same network -- once with SRAM cells, once with the
 ReRAM device -- and tabulates area, energy, latency and efficiency from a single
 tool.
 
-WHY RUN THE BASELINE INSIDE NEUROSIM
-------------------------------------
+Why run the baseline inside neurosim:
 The SRAM comparison in codesign_sweep.py is analytical: it multiplies a 6T
 bitcell area by a bit count and prices a fetch. That is defensible for "how
 much area do the weights occupy" and indefensible as an accelerator comparison,
@@ -23,27 +21,23 @@ It also produces the numbers that are otherwise assumed:
 transistor-level ADC area, buffer and interconnect energy, and chip-level
 latency.
 
-HOW THE CELL TYPE IS SWITCHED
------------------------------
+How the cell type is switched:
 NeuroSim selects the cell in C++, not from the Python wrapper: Param.cpp
 carries `memcelltype` with 1 = SRAM, 2 = analog eNVM (the case here), 3 = digital
 eNVM. Switching therefore means editing Param.cpp and rebuilding, which this
 script does with a backup and an automatic restore, so an interrupted run
 cannot leave the tree in the SRAM configuration.
 
-WHAT TO DO WITH THE RESULT
---------------------------
+What to do with the result:
 Report NeuroSim SRAM and NeuroSim ReRAM side by side as the like-for-like
 comparison, and keeps the tile-level model as the third column with its
 scope stated. Three columns from two tools is more honest than one number.
 
-USAGE
------
+Usage:
     python3 neurosim_compare.py --dry-run          # show what would run
     python3 neurosim_compare.py --out-csv neurosim_compare.csv
 
     NEUROSIM_DIR=~/DNN_NeuroSim_V1.4 python3 neurosim_compare.py
-================================================================================
 """
 import argparse
 import csv
@@ -209,6 +203,16 @@ def run_one(ns, cell, args):
                "--mode", "WAGE", "--cellBit", str(args.cell_bit),
                "--subArray", str(args.subarray),
                "--ADCprecision", str(args.adc_bits)]
+        # parallelRead is the number of rows sensed simultaneously and cannot
+        # exceed the subarray height. NeuroSim's default is 128; leaving it
+        # there while shrinking --subArray asks for more rows than exist and
+        # every latency and energy figure comes back -nan, with the summary
+        # section never written. Tied to the subarray unless overridden.
+        pr = args.parallel_read or args.subarray
+        if pr > args.subarray:
+            print(f"  [warn] parallelRead {pr} exceeds subArray "
+                  f"{args.subarray}; results will be nan")
+        cmd += ["--parallelRead", str(pr)]
         if args.wl_weight is not None:
             cmd += ["--wl_weight", str(args.wl_weight)]
         if args.wl_activate is not None:
@@ -336,6 +340,9 @@ def main():
     ap.add_argument("--dataset", default="cifar10")
     ap.add_argument("--subarray", type=int, default=128)
     ap.add_argument("--adc-bits", type=int, default=6)
+    ap.add_argument("--parallel-read", type=int, default=None,
+                    help="Rows sensed in parallel. Defaults to --subarray. "
+                         "Values above the subarray height produce nan.")
     ap.add_argument("--cell-bit", type=int, default=2)
     ap.add_argument("--wl-weight", type=int, default=None,
                     help="Weight precision in bits. NeuroSim defaults to 8, "

@@ -1,0 +1,71 @@
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | --- qat_b32.pth  block=tile_m=32 ---
+   |   10000 test images
+   |   19 conv layers in 'ideal' mode, ['conv1'] kept full precision
+   |   FP2 digital-exact (baseline)          :  92.42%  (622s)
+   |   19 conv layers in 'analog' mode, ['conv1'] kept full precision
+   |   ANALOG raw readout                    :  77.66%  (1339s)
+   |   19 conv layers in 'corrected' mode, ['conv1'] kept full precision
+   |   ANALOG + per-column gain calibration  :  92.42%  (1890s)
+   |   raw analog cost                       : -14.76 pts
+   |   after gain calibration                :  +0.00 pts (recovered +14.76)
+   | 
+   | --- qat_b64.pth  block=tile_m=64 ---
+   |   10000 test images
+   |   19 conv layers in 'ideal' mode, ['conv1'] kept full precision
+   |   FP2 digital-exact (baseline)          :  92.47%  (334s)
+   |   19 conv layers in 'analog' mode, ['conv1'] kept full precision
+   |   ANALOG raw readout                    :  57.54%  (702s)
+   |   19 conv layers in 'corrected' mode, ['conv1'] kept full precision
+   |   ANALOG + per-column gain calibration  :  92.47%  (950s)
+   |   raw analog cost                       : -34.93 pts
+   |   after gain calibration                :  +0.00 pts (recovered +34.93)
+   | 
+   | --- qat_b128.pth  block=tile_m=128 ---
+   |   10000 test images
+   |   19 conv layers in 'ideal' mode, ['conv1'] kept full precision
+   |   FP2 digital-exact (baseline)          :  92.81%  (205s)
+   |   19 conv layers in 'analog' mode, ['conv1'] kept full precision
+   |   ANALOG raw readout                    :  11.60%  (442s)
+   |   19 conv layers in 'corrected' mode, ['conv1'] kept full precision
+   |   ANALOG + per-column gain calibration  :  92.81%  (591s)
+   |   raw analog cost                       : -81.21 pts
+   |   after gain calibration                :  +0.00 pts (recovered +81.21)
+   | 
+   | --- qat_b256.pth  block=tile_m=256 ---
+   |   10000 test images
+   |   19 conv layers in 'ideal' mode, ['conv1'] kept full precision
+   |   FP2 digital-exact (baseline)          :  92.43%  (141s)
+   |   19 conv layers in 'analog' mode, ['conv1'] kept full precision
+   |   ANALOG raw readout                    :  10.00%  (291s)
+   |   19 conv layers in 'corrected' mode, ['conv1'] kept full precision
+   |   ANALOG + per-column gain calibration  :  92.43%  (365s)
+   |   raw analog cost                       : -82.43 pts
+   |   after gain calibration                :  +0.00 pts (recovered +82.43)
+   | 
+   | ====================================================================================
+   | DOES THE ANALOG READOUT COST ACCURACY, AND IS THE COST REAL OR CALIBRATABLE?
+   | ====================================================================================
+   |   B=M  FP2 digital  raw analog    cost  calibrated    cost  recovered
+   | ------------------------------------------------------------------------------------
+   |    32        92.42       77.66  -14.76       92.42   +0.00     +14.76
+   |    64        92.47       57.54  -34.93       92.47   +0.00     +34.93
+   |   128        92.81       11.60  -81.21       92.81   +0.00     +81.21
+   |   256        92.43       10.00  -82.43       92.43   +0.00     +82.43
+   | ------------------------------------------------------------------------------------
+   | Raw readout is best at B=32 (77.66%): the shared-Rsense loading gain grows with column
+   | height, so the larger blocks that win on energy lose catastrophically on accuracy.
+   | After per-column gain calibration the best is B=128 (92.81%), and the cost varies
+   | by 0.00 pts across B.
+   | 
+   | If the calibrated cost is ~0 at every B, then this model's entire 'analog error'
+   | was a deterministic scale factor and the SNR_analog column in every earlier CSV
+   | overstates the penalty. That is the expected outcome -- the model is noiseless, so
+   | every error in it is systematic. It does NOT mean a real crossbar is free: device
+   | variability, read noise, drift and ADC quantisation are all absent here, and they
+   | are what actually sets the analog floor. Say so explicitly in the paper.
+   | 
+   | Wrote analog_accuracy.csv

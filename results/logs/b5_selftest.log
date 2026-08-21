@@ -1,0 +1,10 @@
+   | ==============================================================
+   | SELF-TEST
+   | ==============================================================
+   |   [1] mesh(R_wire=0) vs shared-Rsense formula: 8.795e-08 relative
+   |   [2] per-column calibration recovers ideal:   8.795e-08 relative
+   |   [3] nonzero wire resistance changes result:  2.152e-01 relative
+   | 
+   | ==============================================================
+   | SELF-TEST PASSED
+   | ==============================================================

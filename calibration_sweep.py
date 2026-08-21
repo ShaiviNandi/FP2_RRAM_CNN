@@ -24,7 +24,7 @@ path in a final design would typically use a separate, larger sense
 resistor for good read margin -- this script isn't trying to design that
 read circuit, just characterize the cell's write response.
 
-WHAT THIS DOES NOT MODEL: thermal accumulation across repeated pulses
+WHAT this does not MODEL: thermal accumulation across repeated pulses
 (each sweep point starts from a fresh gap_ini), and it does not attempt to
 find a true "3-level" write-verify recipe automatically -- it reports the
 calibration DATA for selecting pulse parameters for HRS / mid / LRS
@@ -33,8 +33,7 @@ against the actual target R_HRS/R_LRS spec, which this script does not
 know).
 
 Usage:
-    python3 calibration_sweep.py --osdi rram_v_1_0_0.osdi \
-        --widths 5 10 20 40 80 160 --voltages -1.0 -1.5 -2.0 -2.5 -3.0
+    python3 calibration_sweep.py --osdi rram_v_1_0_0.osdi         --widths 5 10 20 40 80 160 --voltages -1.0 -1.5 -2.0 -2.5 -3.0
 
 Requires: ngspice (built with OSDI support, per this session's build) on
 PATH, or pass --ngspice-bin /path/to/ngspice.
@@ -247,7 +246,7 @@ def main():
             print("given how steep this model's switching kinetics are), or adjust")
             print("--r-hrs-threshold when the target intermediate resistance differs.")
         print()
-        print("NOTE: 'ProgV_cell(V)' above is an ESTIMATE using the LRS-state divider ratio,")
+        print("NOTE: 'ProgV_cell(V)' is estimated from the LRS-state divider ratio,")
         print("not a direct per-run measurement (the compute-phase read row doesn't carry")
         print("the programming-phase operating point). Treat it as directional, not exact --")
         print("for the exact voltage trajectory during programming, add a wrdata")

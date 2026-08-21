@@ -1,0 +1,2 @@
+checkpoint,block_size,n_images,acc_ideal,acc_analog,acc_corrected,analog_cost_pts,corrected_cost_pts,recovered_pts
+qat_b128.pth,128,10000,92.81,10.0,92.52,-82.81,-0.29000000000000625,82.52

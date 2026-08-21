@@ -1,0 +1,32 @@
+   | /home/shaiv/.local/lib/python3.12/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+   |   warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+   | === figures_sweeps self-test ===
+   | 
+   |   wrote fig8_variability.pdf / .png
+   |   wrote fig9_variability_robustness.pdf / .png
+   |   wrote fig10_adc_resolution.pdf / .png
+   |   wrote fig11_adc_energy_projection.pdf / .png
+   |   wrote tab5_variability.tex
+   |   wrote tab6_adc.tex
+   |   wrote tab7_headline.tex
+   |     fig8: ok
+   |     fig9: ok
+   |     fig10: ok
+   |     fig11: ok
+   |     tab5: ok
+   |     tab6: ok
+   |     tab7: ok
+   | 
+   | [2] bits_needed picks the smallest within tolerance
+   |     {32: 5, 64: 5, 128: 5, 256: 5}  (expect 5 everywhere for this synthetic data)
+   | 
+   | [3] Missing inputs skip cleanly
+   |     fig_variability(None) -> False
+   |     fig_adc(None) -> False
+   |     fig_adc_energy(None) -> False
+   | 
+   | [4] 11 files written (expect >= 11)
+   | 
+   | ========================================================
+   | SELF-TEST PASSED
+   | ========================================================

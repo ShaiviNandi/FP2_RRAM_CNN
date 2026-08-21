@@ -1,0 +1,58 @@
+   | === codesign_sweep self-test ===
+   | 
+   | [1] Baseline area arithmetic is dimensionally right
+   |     ReRAM per weight 0.338000 um2 (hand 0.338000) -> True
+   |     density vs SRAM-FP2  3.50x   vs SRAM-FP32 56.0x
+   |     FP32/FP2 density-gain ratio 16.00 (must be 16.0)
+   | 
+   | [2] Area scales linearly with weight count
+   |     doubling weights doubles area: True
+   | 
+   | [3] Weight-movement term falls as 1/reuse, ReRAM stays at zero
+   |     reuse     1x -> SRAM 0.100000 pJ/MAC, ReRAM 0.0
+   |     reuse    10x -> SRAM 0.010000 pJ/MAC, ReRAM 0.0
+   |     reuse   100x -> SRAM 0.001000 pJ/MAC, ReRAM 0.0
+   |     reuse  1000x -> SRAM 0.000100 pJ/MAC, ReRAM 0.0
+   |     monotonic decrease and ReRAM identically zero: True
+   | 
+   | [4] Duty-cycle crossover behaves sensibly
+   |     at    1 inferences/s, SRAM leakage equals active power at duty cycle 0.1360%
+   |     at   10 inferences/s, SRAM leakage equals active power at duty cycle 1.3603%
+   |     at  100 inferences/s, SRAM leakage equals active power at duty cycle 13.6033%
+   |     higher inference rate raises the crossover: True
+   | 
+   | [5] CSV parsers tolerate missing files rather than crashing
+   |     parse_qat_meta(missing) -> {} (empty dict expected)
+   |     parse_bench_csv(missing) -> {} (empty dict expected)
+   |     parse_hw_report(missing) -> {} (empty dict expected)
+   | 
+   | [6] Baseline report renders
+   | 
+   | ==============================================================================
+   | DIGITAL BASELINE -- 2T2R ReRAM vs 6T SRAM, 11,157,504 weights, 65 nm
+   | ==============================================================================
+   | 
+   | WEIGHT STORAGE AREA  [MODEL on ASSUM]
+   |   per weight   ReRAM 2T2R      0.3380 um2
+   |                SRAM  FP2 (2b)  1.1830 um2  -> ReRAM 3.5x denser
+   |   whole net    ReRAM           3.77 mm2
+   |                SRAM  FP2       13.20 mm2
+   |                SRAM  FP32      211.2 mm2  -> ReRAM 56x smaller
+   | 
+   | STANDBY  [MODEL on ASSUM -- leakage varies >10x with corner/temp]
+   |   SRAM holding 2.79 MB of FP2 weights: 2.68 mW, continuously, forever
+   |   ReRAM: 0.0 mW. Retention is a materials property, not a power draw.
+   | 
+   | WEIGHT MOVEMENT  [MODEL]
+   |   at reuse=1x  SRAM fetch 0.1000 pJ/MAC   ReRAM 0 pJ/MAC
+   |   (in-memory compute eliminates this term by construction; it is the whole point)
+   | 
+   | THE COST SIDE -- what ReRAM is bad at  [MODEL on ASSUM]
+   |   programming all 22,315,008 cells once: 2231.5 uJ, 2231.5 ms
+   |   A design that reloads tiles often pays this repeatedly. Any time-multiplexed
+   |   mapping (hw_model --physical-tiles) must amortize it or the comparison is dishonest.
+   | ==============================================================================
+   | 
+   | ============================================================
+   | SELF-TEST PASSED
+   | ============================================================

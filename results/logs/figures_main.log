@@ -1,0 +1,18 @@
+   | /home/shaiv/.local/lib/python3.12/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+   |   warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+   | Inputs found: pareto=True analog=True ngspice=True qat=True layers=True
+   | Writing to paper/figures/
+   | 
+   |   wrote fig1_codesign_collision.pdf / .png
+   |   wrote fig2_loading_attenuation.pdf / .png
+   |   wrote fig3_energy_breakdown.pdf / .png
+   |   wrote fig4_pareto.pdf / .png
+   |   wrote fig5_ngspice_validation.pdf / .png
+   |   wrote fig6_qat_history.pdf / .png
+   |   wrote fig7_layer_snr.pdf / .png
+   |   wrote tab1_architectures.tex
+   |   wrote tab2_codesign.tex
+   |   wrote tab3_memory.tex
+   |   wrote tab4_validation.tex  (87,168 tiles, 357,040,128 MAC-reads)
+   | 
+   | Done. \input{} the .tex files; \includegraphics the .pdf files.

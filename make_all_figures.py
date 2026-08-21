@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
 make_all_figures.py
-================================================================================
 Every figure from the comparison work, generated from the CSVs rather than
 typed. Complements make_figures.py and figures_sweeps.py, which cover the
 original accuracy, variability, ADC and drift results.
 
-FIGURES PRODUCED
-----------------
+Figures produced:
   figA_rlrs_accuracy      calibrated accuracy flat while raw swings with R_LRS
   figA2_rlrs_device       cell area and loading error against R_LRS
   figB_threeway           von Neumann vs SRAM CIM vs ReRAM CIM against reuse
@@ -19,15 +17,13 @@ FIGURES PRODUCED
 Every figure is skipped with a message if its CSV is missing, so a partial run
 produces whatever it can rather than failing.
 
-CAPTIONS ARE DERIVED FROM THE DATA, never hardcoded. A caption that stopped
+CAPTIONS ARE derived FROM the DATA, never hardcoded. A caption that stopped
 tracking its numbers is how a figure in this project kept claiming "5 bits
 suffice" after the answer had become 6.
 
-USAGE
------
+Usage:
     python3 make_all_figures.py --self-test
     python3 make_all_figures.py --outdir paper/figures
-================================================================================
 """
 import argparse
 import csv

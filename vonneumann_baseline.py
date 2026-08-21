@@ -1,28 +1,25 @@
 #!/usr/bin/env python3
 """
 vonneumann_baseline.py
-================================================================================
 The missing third column: a conventional digital accelerator that fetches
 weights and multiplies them, against the two compute-in-memory designs.
 
-WHY THIS COLUMN IS NECESSARY
-----------------------------
+Why this column is necessary:
 Both NeuroSim columns are compute-in-memory. `memcelltype = 1` selects
 SRAM-based CIM, not a von Neumann machine, so both designs already perform the
 multiply-accumulate inside the array and neither pays to move weights. The
 O(1)-MAC advantage is present in both and therefore cancels, leaving only the
 device difference.
 
-That is why the SRAM CIM column looks so strong. It is not a weak baseline; it
-is a very strong one, and comparing only against it hides the advantage that
-motivates in-memory computing in the first place.
+The SRAM CIM column is therefore a strong baseline rather than a weak one, and
+comparing against it alone hides the advantage that motivates in-memory
+computing.
 
 This model supplies the baseline that makes the advantage visible: a digital
 MAC array reading weights from an on-chip SRAM buffer, refilled from DRAM
 whenever the working set does not fit.
 
-WHAT IS MODELLED
-----------------
+What is modelled:
 Per MAC:
     compute       one multiply-accumulate in a digital datapath
     weight fetch  bits_per_weight / weight_reuse, read from SRAM
@@ -34,19 +31,15 @@ thousands of times and the fetch term nearly vanishes. Batch-1 inference on
 fully-connected and 1x1 layers reuses each weight ONCE, which is the regime
 in-memory computing exists for. Both ends are reported.
 
-WHAT IS NOT MODELLED
---------------------
+What is not modelled:
 Control logic, instruction fetch, pipeline registers, clock distribution. The
 digital baseline is therefore OPTIMISTIC -- a real accelerator would do worse,
 so the advantage computed here is a lower bound. Stated so the comparison
 cannot be accused of strawmanning the baseline.
 
-USAGE
------
+Usage:
     python3 vonneumann_baseline.py --self-test
-    python3 vonneumann_baseline.py --reuse-sweep 1,10,100,1000 \\
-        --neurosim-csv cmp_fp2.csv --out-csv threeway.csv
-================================================================================
+    python3 vonneumann_baseline.py --reuse-sweep 1,10,100,1000         --neurosim-csv cmp_fp2.csv --out-csv threeway.csv
 """
 import argparse
 import csv

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sweep array size (M and K) for BOTH 1T1R and 2T2R topologies and plot the
+Sweep array size (M and K) for both 1T1R and 2T2R topologies and plot the
 resulting error, presenting the real tradeoff in one place instead of
 picking topology and size separately.
 

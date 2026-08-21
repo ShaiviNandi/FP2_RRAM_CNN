@@ -1,0 +1,14 @@
+dataset: cifar10 (10 classes)
+device: cuda
+  NVIDIA GeForce RTX 4070 Laptop GPU
+
+--- qat_b128.pth  block=tile_m=128 ---
+  10000 test images
+  19 conv layers in 'ideal' mode, 6-bit ADC, ['conv1'] kept full precision
+  FP2 digital-exact (baseline)          :  92.81%  (11s)
+  19 conv layers in 'analog' mode, 6-bit ADC, ['conv1'] kept full precision
+  ANALOG raw readout                    :  11.61%  (42s)
+  19 conv layers in 'corrected' mode, 6-bit ADC, ['conv1'] kept full precision
+  ANALOG + per-column gain calibration  :  92.43%  (45s)
+  raw analog cost                       : -81.20 pts
+  after gain calibration                :  -0.38 pts (recovered +80.82)

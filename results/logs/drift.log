@@ -1,0 +1,83 @@
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === drift sweep: qat_b32.pth, B=32, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.42%
+   |   t=    1s  raw  79.06%   stale-calib  92.31%   recalibrated  92.15%   (ceiling 92.42%)
+   |   t=    1h  raw  46.23%   stale-calib  88.81%   recalibrated  91.98%   (ceiling 92.42%)
+   |   t=    1d  raw  31.45%   stale-calib  84.22%   recalibrated  91.92%   (ceiling 92.42%)
+   |   t=   1mo  raw  19.05%   stale-calib  74.94%   recalibrated  91.89%   (ceiling 92.42%)
+   |   t=    1y  raw  13.97%   stale-calib  65.17%   recalibrated  91.87%   (ceiling 92.42%)
+   | 
+   | === drift sweep: qat_b64.pth, B=64, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.47%
+   |   t=    1s  raw  59.04%   stale-calib  92.36%   recalibrated  92.21%   (ceiling 92.47%)
+   |   t=    1h  raw  28.68%   stale-calib  89.38%   recalibrated  92.05%   (ceiling 92.47%)
+   |   t=    1d  raw  21.19%   stale-calib  85.83%   recalibrated  91.99%   (ceiling 92.47%)
+   |   t=   1mo  raw  15.22%   stale-calib  79.14%   recalibrated  91.98%   (ceiling 92.47%)
+   |   t=    1y  raw  12.53%   stale-calib  70.97%   recalibrated  91.92%   (ceiling 92.47%)
+   | 
+   | === drift sweep: qat_b128.pth, B=128, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.81%
+   |   t=    1s  raw  11.85%   stale-calib  92.66%   recalibrated  92.45%   (ceiling 92.81%)
+   |   t=    1h  raw  10.04%   stale-calib  89.63%   recalibrated  92.30%   (ceiling 92.81%)
+   |   t=    1d  raw  10.02%   stale-calib  86.25%   recalibrated  92.24%   (ceiling 92.81%)
+   |   t=   1mo  raw  10.00%   stale-calib  79.48%   recalibrated  92.13%   (ceiling 92.81%)
+   |   t=    1y  raw  10.00%   stale-calib  72.21%   recalibrated  92.04%   (ceiling 92.81%)
+   | 
+   | === drift sweep: qat_b256.pth, B=256, 10000 images, nu_LRS=0.01 nu_HRS=0.05 sigma_nu=0.004, 3 seed(s) ===
+   |   FP2 digital-exact ceiling: 92.43%
+   |   t=    1s  raw  10.00%   stale-calib  92.28%   recalibrated  92.06%   (ceiling 92.43%)
+   |   t=    1h  raw  10.00%   stale-calib  90.18%   recalibrated  91.84%   (ceiling 92.43%)
+   |   t=    1d  raw  10.00%   stale-calib  88.08%   recalibrated  91.85%   (ceiling 92.43%)
+   |   t=   1mo  raw  10.00%   stale-calib  84.67%   recalibrated  91.78%   (ceiling 92.43%)
+   |   t=    1y  raw  10.00%   stale-calib  80.56%   recalibrated  91.73%   (ceiling 92.43%)
+   | 
+   | ====================================================================================
+   | DOES A COMPILE-TIME CALIBRATION GO STALE AS THE DEVICE DRIFTS?
+   | ====================================================================================
+   |     B       t    raw %   stale %  recalib %  ceiling %  stale cost
+   | ------------------------------------------------------------------------------------
+   |    32      1s    79.06     92.31      92.15      92.42       -0.11
+   |    32      1h    46.23     88.81      91.98      92.42       -3.61
+   |    32      1d    31.45     84.22      91.92      92.42       -8.20
+   |    32     1mo    19.05     74.94      91.89      92.42      -17.48
+   |    32      1y    13.97     65.17      91.87      92.42      -27.25
+   |    64      1s    59.04     92.36      92.21      92.47       -0.11
+   |    64      1h    28.68     89.38      92.05      92.47       -3.09
+   |    64      1d    21.19     85.83      91.99      92.47       -6.64
+   |    64     1mo    15.22     79.14      91.98      92.47      -13.33
+   |    64      1y    12.53     70.97      91.92      92.47      -21.50
+   |   128      1s    11.85     92.66      92.45      92.81       -0.15
+   |   128      1h    10.04     89.63      92.30      92.81       -3.18
+   |   128      1d    10.02     86.25      92.24      92.81       -6.56
+   |   128     1mo    10.00     79.48      92.13      92.81      -13.33
+   |   128      1y    10.00     72.21      92.04      92.81      -20.60
+   |   256      1s    10.00     92.28      92.06      92.43       -0.15
+   |   256      1h    10.00     90.18      91.84      92.43       -2.25
+   |   256      1d    10.00     88.08      91.85      92.43       -4.35
+   |   256     1mo    10.00     84.67      91.78      92.43       -7.76
+   |   256      1y    10.00     80.56      91.73      92.43      -11.87
+   | ------------------------------------------------------------------------------------
+   | Worst stale point: B=32, t=1y, 65.17% vs 92.42% ceiling.
+   | Refreshing the constants there is worth +26.69 pts.
+   | 
+   | If `stale` holds, the calibration is genuinely compile-time and the
+   | contribution stands as written. If only `recalib` holds, the design needs
+   | a periodic read-back-and-refresh, which is a real but bounded cost -- state
+   | the required interval. If neither holds, drift, not the divider, is what
+   | limits tile height, and that becomes the paper's finding instead.
+   | 
+   | ====================================================================================
+   | DOES THE ANALOG READOUT COST ACCURACY, AND IS THE COST REAL OR CALIBRATABLE?
+   | ====================================================================================
+   |   B=M  FP2 digital  raw analog    cost
+   | ------------------------------------------------------------------------------------
+   | Traceback (most recent call last):
+   |   File "/home/shaiv/fp2_reram/python/analog_eval.py", line 1290, in <module>
+   |     main()
+   |   File "/home/shaiv/fp2_reram/python/analog_eval.py", line 1245, in main
+   |     f"{r['acc_analog']:>12.2f}{r['analog_cost_pts']:>+8.2f}")
+   |        ~^^^^^^^^^^^^^^
+   | KeyError: 'acc_analog'

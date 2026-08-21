@@ -1,0 +1,54 @@
+   | dataset: cifar10 (10 classes)
+   | device: cuda
+   |   NVIDIA GeForce RTX 4070 Laptop GPU
+   | 
+   | === ADC sweep: qat_b32.pth, B=32, 10000 images ===
+   |            4-bit:  74.88%
+   |            5-bit:  91.27%
+   |            6-bit:  92.41%
+   |            8-bit:  92.47%
+   |           10-bit:  92.44%
+   |   exact (no ADC):  92.42%
+   | 
+   | === ADC sweep: qat_b64.pth, B=64, 10000 images ===
+   |            4-bit:  66.93%
+   |            5-bit:  90.97%
+   |            6-bit:  92.27%
+   |            8-bit:  92.47%
+   |           10-bit:  92.48%
+   |   exact (no ADC):  92.47%
+   | 
+   | === ADC sweep: qat_b128.pth, B=128, 10000 images ===
+   |            4-bit:  77.18%
+   |            5-bit:  91.43%
+   |            6-bit:  92.43%
+   |            8-bit:  92.70%
+   |           10-bit:  92.80%
+   |   exact (no ADC):  92.81%
+   | 
+   | === ADC sweep: qat_b256.pth, B=256, 10000 images ===
+   |            4-bit:  77.88%
+   |            5-bit:  90.85%
+   |            6-bit:  92.01%
+   |            8-bit:  92.49%
+   |           10-bit:  92.43%
+   |   exact (no ADC):  92.43%
+   | 
+   | ==============================================================================
+   | DOES A TALLER TILE DEMAND A WIDER ADC?
+   | ==============================================================================
+   | Top-1 (%) after gain calibration
+   |   B\bits        4        5        6        8       10    exact
+   | ------------------------------------------------------------------------------
+   |       32    74.88    91.27    92.41    92.47    92.44    92.42
+   |       64    66.93    90.97    92.27    92.47    92.48    92.47
+   |      128    77.18    91.43    92.43    92.70    92.80    92.81
+   |      256    77.88    90.85    92.01    92.49    92.43    92.43
+   | ------------------------------------------------------------------------------
+   | Read down a column: if the bits needed to stay within ~1 pt of exact grow with B,
+   | the ADC energy saved by amortising over more rows is partly handed back, because
+   | SAR energy scales as 2^N. The net efficiency curve in hw_model assumed a FIXED
+   | 8-bit converter at every B -- if this table says otherwise, that curve needs redoing
+   | with per-B ADC resolution, and the 2.8x figure will shrink.
+   | 
+   | Wrote adc_sweep.csv

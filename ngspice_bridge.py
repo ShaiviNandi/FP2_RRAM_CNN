@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 ngspice_bridge.py
-================================================================================
 Actually invokes ngspice as a subprocess on netlists built by
 crossbar_array_test.py, and parses its output back into the same units as
 golden_array_matmul() -- so the two can be diffed directly.
@@ -9,31 +8,29 @@ golden_array_matmul() -- so the two can be diffed directly.
 This is the missing piece that closes the loop between the fast nodal-
 analysis "golden model" (crossbar_array_test.golden_array_matmul, pure
 Python, instant, used for the bulk per-layer sweep in
-benchmark_resnet18.py) and REAL circuit simulation (ngspice solving the
+benchmark_resnet18.py) and real circuit simulation (ngspice solving the
 same resistor network numerically). Since ngspice subprocess calls are
 ~10-50ms each (netlist write + process spawn + parse), this is meant for
-spot-check validation of a handful of samples, NOT for replacing the fast
+spot-check validation of a handful of samples, not for replacing the fast
 model in the full per-layer sweep -- see validate_against_ngspice() in
 benchmark_resnet18.py for how it's actually used.
 
-WHAT THIS DOES NOT DO: it still only exercises the fixed-resistor
-READ-ONLY netlist (build_array_read_netlist), i.e. DC .op steady-state
+WHAT this does not DO: it still only exercises the fixed-resistor
+READ-only netlist (build_array_read_netlist), i.e. DC .op steady-state
 with each cell already at its programmed HRS/LRS resistance -- same as
-golden_array_matmul(). It does NOT invoke the Stanford Verilog-A compact
+golden_array_matmul(). It does not invoke the Stanford Verilog-A compact
 model (rram_v_1_0_0_openvaf.va), so it still doesn't capture transient
-switching dynamics, gap evolution, or thermal effects. It DOES confirm
+switching dynamics, gap evolution, or thermal effects. It does confirm
 the fast nodal model is solving the identical resistor network correctly,
 which is a different (and cheaper to check) claim than "matches real
 device physics."
 
-USAGE
------
+Usage:
     python3 ngspice_bridge.py --self-test
         Runs a small built-in sanity check (2x2 crossbar, hand-verifiable)
         and reports nodal-vs-ngspice relative error.
 
     from ngspice_bridge import spice_array_matmul, check_ngspice_available
-================================================================================
 """
 import argparse
 import os

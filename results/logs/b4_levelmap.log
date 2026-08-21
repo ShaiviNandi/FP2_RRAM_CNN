@@ -1,0 +1,18 @@
+   | R_LRS=542.8  R_MID=1099.8  R_HRS=218587.2
+   | on/off ratio        402.7
+   | R_MID / R_LRS       2.0262   (should be exactly 2)
+   | 
+   |   level     ideal      actual    error %
+   | ----------------------------------------
+   |    +1.0    1.0000     1.00000     +0.000
+   |    +0.5    0.5000     0.49228     -1.543
+   |     0.0    0.0000     0.00000     +0.000
+   | ----------------------------------------
+   | worst level error   1.543%
+   | 
+   | Fix A: trim R_MID at programming time.
+   |         target R_MID = 1082.91 ohm   (currently 1099.8)
+   |         i.e. a -1.54% trim
+   |         verified: trimmed level 0.5 lands at 0.500000000000
+   | Fix B: fold the measured ratio into the block scale -- zero hardware cost,
+   |        and it also absorbs any per-chip trim error.
