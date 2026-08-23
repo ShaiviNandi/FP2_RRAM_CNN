@@ -1,0 +1,45 @@
+[cited] Horowitz ISSCC 2014 Fig. 1.1.9 constants in use:
+         MAC_PJ_INT8              0.5906 pJ
+         MAC_PJ_FP2               0.0770 pJ
+         SRAM_READ_PJ_PER_BIT     0.3125 pJ
+
+==============================================================================
+VON NEUMANN DIGITAL BASELINE -- 2-bit weights, 11,157,504 weights, 4 MB buffer
+==============================================================================
+   reuse     compute   SRAM fetch        DRAM    pJ/MAC    TOPS/W
+------------------------------------------------------------------------------
+       1       0.86u        6.97u       0.00u    0.7020      2.85
+       2       0.86u        3.49u       0.00u    0.3895      5.13
+       5       0.86u        1.39u       0.00u    0.2020      9.90
+      10       0.86u        0.70u       0.00u    0.1395     14.33
+     100       0.86u        0.07u       0.00u    0.0833     24.01
+    1000       0.86u        0.01u       0.00u    0.0777     25.75
+------------------------------------------------------------------------------
+area 19.15 mm2 (MACs 0.23, buffer 18.93), buffer leakage 3.8 mW
+DRAM miss fraction 0.000
+
+==============================================================================
+THREE-WAY: WHERE IN-MEMORY COMPUTE ACTUALLY WINS
+==============================================================================
+                               von Neumann      SRAM CIM     ReRAM CIM
+------------------------------------------------------------------------------
+TOPS/W @ reuse=1                      2.85         67.99         47.09
+TOPS/W @ reuse=1000                  25.75         67.99         47.09
+weight-fetch pJ/MAC @ 1             0.6250        0.0000        0.0000
+------------------------------------------------------------------------------
+  SRAM CIM vs von Neumann at reuse 1: 23.9x better
+  SRAM CIM vs von Neumann at reuse 1000: 2.6x
+  RRAM CIM vs von Neumann at reuse 1: 16.5x better
+  RRAM CIM vs von Neumann at reuse 1000: 1.8x
+
+The CIM columns do not move with reuse because they never fetch
+a weight. That gap IS the O(1)-MAC advantage, and it is only
+visible against a machine that does fetch. Comparing SRAM CIM
+against ReRAM CIM cannot show it, because both already have it.
+
+Note the baseline is optimistic: no control logic, no
+instruction fetch, no clock distribution. A real digital
+accelerator would do worse, so this is a lower bound on the
+advantage.
+
+Wrote threeway_cited.csv

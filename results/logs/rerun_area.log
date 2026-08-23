@@ -1,0 +1,75 @@
+==============================================================================
+1. WHAT THE SOURCE ADDS TO CHIP AREA
+==============================================================================
+    594  if (param->sync_data_transfer) area += NMTileArea*param->totaltile_num;
+    595  else area += NMTileArea*desiredNumTileNM;
+    620  if (param->sync_data_transfer) area += 0;
+    621  else area += CMTileArea*desiredNumTileCM;
+    643  area += GhTree->area;
+    647  area += GBus->area;
+    660  area += GreLu->area;
+    665  area += Gsigmoid->area;
+    671  area += globalBufferArea + maxPool->area + Gaccumulation->area;
+
+  9 contributing statements. Any name here that is
+  absent from the printed summary below is part of the residual.
+
+==============================================================================
+2. WHAT THE LOG PRINTS
+==============================================================================
+  Other Peripheries (e.g. decoders, mux, switchmatrix, buffers,       26,102,400 um^2    7.62%
+  Total IC Area on chip (Global and Tile/PE local)                    25,010,800 um^2    7.30%
+  Total ADC (or S/As and precharger for SRAM) Area on chip            13,509,000 um^2    3.94%
+  Total Accumulation Circuits (subarray level: adders, shiftAdds       9,945,640 um^2    2.90%
+  Chip total CIM array                                                   837,393 um^2    0.24%
+  ------------------------------------------------------------------------------------------------
+  named subtotal                                                      75,405,233 um^2   22.02%
+  CHIP TOTAL                                                         342,512,000 um^2  100.00%
+  residual                                                           267,106,767 um^2   77.98%
+
+  Large residual. Before concluding anything, check that every
+  printed component above was captured: a label whose text
+  changed between versions will be silently absent here, and
+  that looks identical to genuinely missing area.
+
+  Cross-check against section 1: every `area +=` target should
+  correspond to something in the table above.
+
+  To split the residual further, add a print next to each global
+  CalculateArea call found in section 1 and rebuild.
+
+==============================================================================
+3. COMPONENT-WISE COMPARISON
+==============================================================================
+
+  64 rows  vs  32 rows
+  --------------------------------------------------------------------------
+  component                                  baseline       this     change
+  Chip total CIM array                        837,393    952,344     +13.7%
+  Total IC Area on chip (Global and Tile/P 25,010,800 12,872,900     -48.5%
+  Total ADC (or S/As and precharger for SR 13,509,000  7,875,370     -41.7%
+  Total Accumulation Circuits (subarray le  9,945,640  5,453,950     -45.2%
+  Other Peripheries (e.g. decoders, mux, s 26,102,400 19,309,500     -26.0%
+  --------------------------------------------------------------------------
+  CHIP TOTAL                              342,512,000206,796,000     -39.6%
+
+  Area ratio 1.66x (smaller than baseline).
+  Attribute the change to the component that moved, not to the
+  total. A total that falls while the array grows means the
+  saving came from converters, not from density.
+
+  128 rows  vs  32 rows
+  --------------------------------------------------------------------------
+  component                                  baseline       this     change
+  Chip total CIM array                        837,393    931,790     +11.3%
+  Total IC Area on chip (Global and Tile/P 25,010,800 10,842,600     -56.6%
+  Total ADC (or S/As and precharger for SR 13,509,000  4,042,210     -70.1%
+  Total Accumulation Circuits (subarray le  9,945,640  3,198,170     -67.8%
+  Other Peripheries (e.g. decoders, mux, s 26,102,400 14,695,000     -43.7%
+  --------------------------------------------------------------------------
+  CHIP TOTAL                              342,512,000120,409,000     -64.8%
+
+  Area ratio 2.84x (smaller than baseline).
+  Attribute the change to the component that moved, not to the
+  total. A total that falls while the array grows means the
+  saving came from converters, not from density.

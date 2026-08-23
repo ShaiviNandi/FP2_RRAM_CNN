@@ -207,8 +207,16 @@ def fig_adc_energy(adc_rows, outdir, base_pj=None, base_adc_frac=None):
     new energy simulation -- re-run hw_model --adc-bits to confirm."""
     if not adc_rows:
         return False
+    # Hardcoded fallbacks, kept only so the figure still draws without the
+    # hw_model reports. They are from an earlier parameter set and no longer
+    # match: hw_b*.json currently gives 0.903 / 0.872 / 0.816 / 0.724 for the
+    # ADC energy fraction and 0.0887 / 0.0459 / 0.0246 / 0.0141 pJ per MAC.
+    # Pass --hw-json so the projection uses measured values.
     base_pj = base_pj or {32: 0.4076, 64: 0.2365, 128: 0.1454, 256: 0.0962}
     base_adc_frac = base_adc_frac or {32: 0.789, 64: 0.685, 128: 0.556, 256: 0.418}
+    if base_pj.get(32) == 0.4076:
+        print("    [warn] fig_adc_energy is using stale hardcoded constants; "
+              "pass measured values from hw_b*.json")
     need = bits_needed(adc_rows)
     blocks = [b for b in sorted(need) if b in base_pj and need[b]]
     if not blocks:

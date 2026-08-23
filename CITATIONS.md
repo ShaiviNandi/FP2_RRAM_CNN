@@ -256,10 +256,10 @@ figure suggests. The model uses 0.3125, the optimistic edge of the range.
 **Which constant actually decides the comparison.** As reuse grows the fetch
 term vanishes and TOPS/W → 2/`mac_pj`, independent of SRAM read energy:
 
-| FP2 MAC | asymptotic TOPS/W | ReRAM CIM (65.61) |
+| FP2 MAC | asymptotic TOPS/W | ReRAM CIM (47.09) |
 |---|---:|---:|
-| 0.030 pJ (legacy) | 66.67 | **0.98× — CIM loses** |
-| 0.077 pJ (scaled) | 25.97 | **2.53× — CIM wins** |
+| 0.030 pJ (legacy) | 66.67 | **0.71× — CIM loses** |
+| 0.077 pJ (scaled) | 25.97 | **1.81× — CIM wins** |
 
 The load-bearing correction is the **MAC term**, and it is pure node scaling:
 0.03 pJ is the 45 nm value used unscaled at 65 nm. SRAM read energy only moves
@@ -374,12 +374,30 @@ Distributed wire resistance is **not** compile-time correctable. Claim narrowed
 to the R_sense term.
 
 ### Technology comparison — NeuroSim, 2-bit weights, VGG-8
+
+**6-bit hardware ADC** (`levelOutput = 64` in `Param.cpp`). Earlier revisions of
+this table were at `levelOutput = 32`, i.e. a 5-bit converter, because the
+Python `--ADCprecision` flag does not reach NeuroSim's hardware model. Those
+numbers are superseded.
+
 | | chip area | latency/img | TOPS/W | TOPS/mm² |
 |---|---:|---:|---:|---:|
-| SRAM CIM | 21.65 mm² | 123.55 µs | 105.53 | 0.4605 |
-| ReRAM CIM (6 kΩ) | 100.56 mm² | 167.39 µs | 65.61 | 0.0732 |
-| ReRAM CIM (100 kΩ) | 87.68 mm² | — | 99.27 | 0.1156 |
-| MRAM-like (ratio 3) | 80.59 mm² | 206.10 µs | 49.14 | 0.0742 |
+| SRAM CIM | 23.93 mm² | 149.28 µs | 67.99 | 0.3449 |
+| ReRAM CIM (6 kΩ) | 120.41 mm² | 178.18 µs | 47.09 | 0.0574 |
+| ReRAM CIM (20 kΩ) | 109.31 mm² | 149.97 µs | 58.54 | 0.0751 |
+| ReRAM CIM (50 kΩ) | 107.59 mm² | 134.44 µs | 65.09 | 0.0852 |
+| MRAM-like (ratio 3) | 88.49 mm² | 216.95 µs | 37.90 | 0.0642 |
+
+### Tile height — the area and efficiency argument, 6-bit ADC
+| rows | chip area | named subtotal | ADC area | TOPS/W |
+|---:|---:|---:|---:|---:|
+| 32 | 342.51 mm² | 75.41 mm² | 13.51 mm² | 21.23 |
+| 64 | 206.80 mm² | 46.46 mm² | 7.88 mm² | 33.17 |
+| **128** | **120.41 mm²** | **33.71 mm²** | **4.04 mm²** | **47.09** |
+
+Quote the **named subtotal** ratio of 2.24×, not the chip-total 2.84×: the
+chip total tracks floorplan geometry, and 65.6% of it sits inside per-tile
+bounding boxes that no component line reports.
 
 **Caveat:** reported categories sum to ~30% of ReRAM chip area against ~96%
 for SRAM. The remainder sits inside NeuroSim's own `ChipArea` computation.
@@ -396,10 +414,12 @@ Accuracy at ratio 3: **10.70% (chance)**, against 91.70% at ratio 403.
 ### Against von Neumann — FP2 weights, 4 MB buffer
 | reuse | von Neumann | SRAM CIM | ReRAM CIM |
 |---:|---:|---:|---:|
-| 1 | 15.38 | 105.53 | 65.61 |
-| 1000 | 66.45 | 105.53 | 65.61 |
+| 1 | 2.85 | 67.99 | 47.09 |
+| 1000 | 25.75 | 67.99 | 47.09 |
 
-ReRAM CIM is **4.3×** von Neumann at reuse 1. The CIM columns are flat because
+ReRAM CIM is **16.5×** von Neumann at reuse 1 and **1.8×** at reuse 1000; SRAM
+CIM is 23.9× and 2.6×. Both use the cited Horowitz constants and the 6-bit
+converter. The CIM columns are flat because
 they never fetch a weight — that flatness is the O(1)-MAC advantage.
 
 ### FP2 vs INT8 in the digital baseline

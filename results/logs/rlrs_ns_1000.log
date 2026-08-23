@@ -5,7 +5,7 @@ memcelltype currently: 1
   memcelltype 1 -> 2 (rram)
   resistanceOn 542.8 -> 1000.0
   rebuilding NeuroSIM ...
-  $ /usr/bin/python3 inference.py --dataset cifar10 --model VGG8 --mode WAGE --cellBit 2 --subArray 128 --ADCprecision 6 --wl_weight 2 --onoffratio 403
+  $ /usr/bin/python3 inference.py --dataset cifar10 --model VGG8 --mode WAGE --cellBit 2 --subArray 128 --ADCprecision 6 --parallelRead 128 --wl_weight 2 --onoffratio 403
   Param.cpp restored
 
 ==============================================================================

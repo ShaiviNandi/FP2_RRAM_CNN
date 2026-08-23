@@ -1,0 +1,73 @@
+NeuroSim at /home/shaiv/DNN_NeuroSim_V1.4
+memcelltype currently: 1
+
+=== SRAM ===
+  memcelltype 1 -> 1 (sram)
+  rebuilding NeuroSIM ...
+  $ /usr/bin/python3 inference.py --dataset cifar10 --model VGG8 --mode WAGE --cellBit 2 --subArray 128 --ADCprecision 6 --parallelRead 128 --wl_weight 2
+  Param.cpp restored
+
+=== RRAM ===
+  memcelltype 1 -> 2 (rram)
+  resistanceOn 542.8 -> 6000.0
+  rebuilding NeuroSIM ...
+  $ /usr/bin/python3 inference.py --dataset cifar10 --model VGG8 --mode WAGE --cellBit 2 --subArray 128 --ADCprecision 6 --parallelRead 128 --wl_weight 2 --onoffratio 403
+  Param.cpp restored
+
+==============================================================================
+NEUROSIM, SAME TOOL, SAME NETWORK, DIFFERENT CELL
+==============================================================================
+weight 2b, cell 2b -> 1 cell(s) per weight  [FP2: one cell, no shift-add tree]
+------------------------------------------------------------------------------
+metric                                      sram          rram
+------------------------------------------------------------------------------
+chip area (mm2)                           23.927       120.409
+  CIM array (mm2)                          5.435         0.932
+  ADC / sense (mm2)                        5.465         4.042
+  interconnect (mm2)                       4.498        10.843
+  accumulation (mm2)                       3.419         3.198
+  other periphery (mm2)                    4.036        14.695
+latency/image (us)                        149.28        178.18
+dynamic energy/img (uJ)                   14.768        21.337
+leakage power (uW)                         550.3         586.7
+  ADC energy (uJ)                         10.794        13.169
+  accum energy (uJ)                        0.993         0.993
+  other energy (uJ)                        2.981         7.174
+TOPS                                        8.25          6.91
+TOPS/W                                     67.99         47.09
+TOPS/mm2                                  0.3449        0.0574
+FPS                                        6,699         5,612
+accuracy (%)                                  89            89
+1T1R tx width needed (F)                      --            --
+------------------------------------------------------------------------------
+
+  [warn] rram: area components sum to 33.7 mm2 but chip is 120.4 mm2 (72% unaccounted). A component is not being parsed -- do not trust the breakdown.
+
+DIRECTION OF EACH COMPARISON
+  chip area: ReRAM WORSE by 5.03x
+  latency/image: ReRAM WORSE by 1.19x
+  dynamic energy: ReRAM WORSE by 1.44x
+  leakage power: ReRAM WORSE by 1.07x
+  TOPS/W: ReRAM WORSE by 1.44x
+  TOPS/mm2: ReRAM WORSE by 6.01x
+  throughput FPS: ReRAM WORSE by 1.19x
+
+Both columns come from one tool, one floorplanner and one energy
+model, so the difference is the device rather than the
+methodology. That is what the analytical SRAM baseline could not
+claim -- and it cuts both ways.
+
+READ THIS BEFORE QUOTING ANYTHING ABOVE
+  These ReRAM numbers are for R_LRS = 542.8 ohm, which forces a
+  ~127F-wide 1T1R select transistor to carry the read current.
+  That cell dominates the area result and, through it, TOPS/mm2.
+  A higher LRS resistance needs a narrower transistor and a
+  smaller cell, at the cost of less signal current. Sweep it:
+    for R in 542.8 2000 6000 20000; do \
+      NEUROSIM_DIR=... python3 neurosim_compare.py \
+        --cells rram --resistance-on $R --cell-width 0 \
+        --out-csv rram_ron_$R.csv ; done
+  The cell width NeuroSim demands scales roughly as 1/R_LRS, so
+  the sweep is the design result rather than the single point.
+
+Wrote cmp_fp2.csv

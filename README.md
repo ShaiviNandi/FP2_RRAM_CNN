@@ -98,14 +98,24 @@ model: R_LRS = 542.8 ohm, R_MID = 1099.8 ohm, R_HRS = 218587.2 ohm
 ## Layout
 
 ```
-*.py                    simulation, evaluation, hardware model, figures
-rtl/                    SystemVerilog/Verilog periphery and testbenches
-spice/                  ngspice decks and the Verilog-A ReRAM model
-docs/                   report, explainer (PDF + LaTeX source), open items
-index.html, server.py   browser dashboard
-run_all.sh              full pipeline, staged
-run_blocking.sh         pre-submission checklist, staged
+*.py                        simulation, evaluation, hardware model, figures
+date_paper_full.tex         DATE submission draft
+FP2_ReRAM_Explained.tex     long-form explainer, PDF alongside
+results/csv, figures, logs  generated outputs, committed
+references/INDEX.md         every cited paper and the number taken from it
+rtl/                        SystemVerilog/Verilog periphery and testbenches
+spice/                      ngspice decks and the Verilog-A ReRAM model
+docs/                       report, integration notes, open items
+index.html, server.py       browser dashboard
+run_all.sh                  full pipeline, staged
+run_blocking.sh             pre-submission checklist, staged
+sync_results.sh             copy generated artefacts into results/
+tidy_repo.sh                remove build products and superseded drafts
 ```
+
+The papers themselves are not committed. They were obtained under an
+institutional subscription and are not redistributable; `references/INDEX.md`
+records what each one supplies and where it came from.
 
 Key modules:
 
@@ -118,7 +128,13 @@ Key modules:
 | `qat_finetune_fp2.py` | FP2 quantization-aware training with a straight-through estimator. |
 | `hw_model.py` | Area, energy and delay. Every assumption is a named, overridable constant. |
 | `codesign_sweep.py` | Block-size Pareto sweep and the SRAM baseline. |
-| `make_figures.py`, `figures_sweeps.py` | All figures and LaTeX tables, generated from the CSVs. |
+| `make_figures.py`, `figures_sweeps.py`, `make_all_figures.py` | All figures and LaTeX tables, generated from the CSVs. |
+| `make_memory_area.py` | Weight-array footprint across ReRAM and SRAM. |
+| `bn_baseline.py` | BatchNorm recalibration baseline. |
+| `wordline_ir.py` | Full 2-D resistive mesh, for the wire-parasitic limits. |
+| `vonneumann_baseline.py` | Digital fetch-and-multiply baseline for the three-way comparison. |
+| `rlrs_tradeoff.py` | Device-resistance sweep: area against signal. |
+| `neurosim_compare.py`, `neurosim_area_breakdown.py` | Chip-level cross-check and component-wise area. |
 
 ---
 

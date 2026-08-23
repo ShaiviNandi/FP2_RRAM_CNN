@@ -1,0 +1,2 @@
+cell,chip_area_um2,cim_array_um2,ic_area_um2,adc_area_um2,accum_area_um2,other_area_um2,latency_ns,dyn_energy_pj,leak_energy_pj,leak_power_uw,buffer_energy_pj,ic_energy_pj,tops_per_w,tops,fps,tops_per_mm2,accuracy_pct,req_tx_width_f,adc_energy_pj,accum_energy_pj,other_energy_pj,_cfg
+rram,342512000.0,837393.0,25010800.0,13509000.0,9945640.0,26102400.0,171155.0,47265600.0,297701.0,1739.36,196681.0,4111300.0,21.2286,7.19718,5842.65,0.0210129,89.0,,36355600.0,4037110.0,6872840.0,"weight 2b, cell 2b -> 1 cell(s) per weight  [FP2: one cell, no shift-add tree]"
