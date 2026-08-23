@@ -97,6 +97,12 @@ def load_json(path):
 
 
 def save(fig, outdir, name):
+    # Tighten before writing. Without it, rotated tick labels, twin-axis
+    # labels and titles are clipped at the figure edge.
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
     for ext in ("pdf", "png"):
         p = os.path.join(outdir, f"{name}.{ext}")
         fig.savefig(p)
@@ -171,8 +177,8 @@ def fig_attenuation(analog, outdir, r_sense=20.0, r_lrs=542.8, util=0.42):
     g_col = M * util / r_lrs
     retained = 1.0 / (1.0 + r_sense * g_col)
 
-    fig, ax = plt.subplots(figsize=(4.6, 2.9))
-    ax.plot(M, 100 * retained, "-", color=C_ANALOG,
+    fig, ax = plt.subplots(figsize=(5.4, 3.2))
+    ax.plot(M, 100 * retained, "-", color=C_ANALOG, lw=1.6,
             label=r"$1/(1+R_s G_{col})$  (analytic)")
     ax.set_xscale("log", base=2)
     ax.set_xticks(M)
@@ -188,13 +194,22 @@ def fig_attenuation(analog, outdir, r_sense=20.0, r_lrs=542.8, util=0.42):
                  color=C_DIGITAL, label="measured accuracy loss")
         ax2.set_ylabel("Top-1 lost, raw readout (pts)", color=C_DIGITAL)
         ax2.tick_params(axis="y", colors=C_DIGITAL)
+        # Headroom so the steep right-hand end of the measured curve does not
+        # run into the legend or the frame.
+        ylo, yhi = ax2.get_ylim()
+        ax2.set_ylim(ylo, yhi + 0.18 * (yhi - ylo))
         h1, l1 = ax.get_legend_handles_labels()
         h2, l2 = ax2.get_legend_handles_labels()
-        ax.legend(h1 + h2, l1 + l2, loc="upper right", framealpha=0.92)
+        handles, labels = h1 + h2, l1 + l2
     else:
-        ax.legend(loc="upper right")
+        handles, labels = ax.get_legend_handles_labels()
+    # Both curves rise or fall steeply on the right, so every in-axes corner is
+    # occupied. The legend goes under the plot instead.
+    ax.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, -0.28),
+              ncol=2, frameon=False, fontsize=8, handlelength=1.8,
+              columnspacing=1.2)
     ax.set_title("The loading error is a deterministic gain, not noise",
-                 fontsize=9)
+                 fontsize=9, pad=8)
     save(fig, outdir, "fig2_loading_attenuation")
     return True
 
@@ -283,12 +298,29 @@ def fig_ngspice_validation(jsonl_path, summary, outdir, max_rows=200000):
         return False
 
     e = np.array(errs)
-    fig, ax = plt.subplots(figsize=(4.4, 2.7))
-    ax.hist(e, bins=60, color=C_CORRECTED, edgecolor="none")
-    ax.set_xlabel("relative disagreement, ngspice vs nodal model (%)")
+
+    # Rescale by hand rather than letting matplotlib factor out a power of ten.
+    # Its offset text is drawn at the corner of the axes and collides with the
+    # x-label, which reads as a stray "(1e)" in the rendered figure. Choosing
+    # the decade explicitly puts the exponent in the label where it belongs.
+    emax = float(e.max())
+    dec = int(np.floor(np.log10(emax))) if emax > 0 else 0
+    scale = 10.0 ** dec
+    es = e / scale
+    unit = f"$\\times 10^{{{dec}}}$ %"
+
+    fig, ax = plt.subplots(figsize=(5.0, 3.0))
+    ax.hist(es, bins=60, color=C_CORRECTED, edgecolor="none")
+    ax.set_xlabel(f"relative disagreement, ngspice vs nodal model ({unit})")
     ax.set_ylabel("tiles")
-    ax.set_title(f"{len(e):,} tiles, max {e.max():.2e}%", fontsize=9)
-    ax.axvline(e.max(), color=C_ANALOG, lw=1, ls="--")
+    ax.set_title(f"{len(e):,} tiles, worst case {emax:.2e}%", fontsize=9)
+    ax.axvline(es.max(), color=C_ANALOG, lw=1, ls="--")
+    ax.ticklabel_format(axis="x", style="plain")
+    # Headroom so the tallest bar and the top y tick are not flush with the frame.
+    ax.set_ylim(0, ax.get_ylim()[1] * 1.12)
+    ax.annotate(f"max {es.max():.2f}", xy=(es.max(), ax.get_ylim()[1] * 0.72),
+                xytext=(-6, 0), textcoords="offset points",
+                ha="right", va="center", fontsize=8, color=C_ANALOG)
     save(fig, outdir, "fig5_ngspice_validation")
     return True
 
