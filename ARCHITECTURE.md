@@ -124,22 +124,7 @@ algebra collapses to $(G_p - G_n)^{\!\top}V$, the ideal product.
 
 ---
 
-## 6. What is NOT in this architecture
-
-Stated explicitly, because each has been wrongly assumed at least once.
-
-- **No 8-bit weights.** Weights are 2 bits. Always.
-- **No multi-cell weight decomposition.** One pair per weight.
-- **No shift-add accumulation tree.** Nothing to recombine.
-- **No transimpedance amplifier.** Passive sensing is the deliberate choice.
-- **No per-cell read-back.** Calibration is blind, from nominal values.
-- **No time-multiplexing.** Fully weight-stationary; reprogramming at ~100 pJ
-  per cell makes swapping non-viable below ~2200 images.
-- **No digital CIM.** Computation is analog, in the array.
-
----
-
-## 7. Mapping onto NeuroSim
+## 6. Mapping onto NeuroSim
 
 The configuration that represents this architecture, against NeuroSim's
 defaults.
@@ -163,26 +148,7 @@ leaves the other stale.
 
 ---
 
-## 8. What the design is claimed to be good at
-
-Honest scope, in the order the evidence supports.
-
-1. **Array density.** Measured by NeuroSim: 3.605 mm² against SRAM's
-   21.031 mm², a 5.8× advantage — with the caveat that this was at 8-bit and
-   must be re-measured at 2-bit.
-2. **Converter area.** 7.949 mm² against SRAM's 15.384 mm².
-3. **Zero standby retention power** at the array. Note this is swamped at chip
-   level by periphery leakage, which both designs share.
-4. **Zero weight-fetch energy**, by construction. Worth most at weight
-   reuse 1; report the reuse curve, not the single point.
-
-**Not claimed:** that ReRAM beats SRAM on every metric. At 542.8 Ω the select
-transistor is large, and chip-level area and TOPS/mm² currently favour SRAM.
-The resistance sweep is the design result, not a single operating point.
-
----
-
-## 9. The device parameter question
+## 7. The device parameter question
 
 $R_{\mathrm{LRS}} = 542.8\,\Omega$ sits at an awkward point and the tension
 should be stated rather than hidden:
