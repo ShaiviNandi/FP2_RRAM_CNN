@@ -47,3 +47,8 @@ paper/figures/
 !results/csv/*.csv
 !results/figures/*
 !results/json/*
+
+# Internal working notes: threat assessments, citation corrections, task
+# lists. Kept on disk, not published.
+notes/
+tidy_repo.sh

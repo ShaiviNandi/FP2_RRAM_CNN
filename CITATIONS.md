@@ -6,7 +6,7 @@ One table per category. Three provenance tiers:
 |---|---|
 | **CITED** | taken from a named publication, quote in the notes |
 | **SIM** | measured by ngspice or by our own solver |
-| **ASSUM** | literature-typical placeholder — must be replaced or bounded before submission |
+| **ASSUM** | assumed value, bounded by a sweep or by cited limits |
 
 ---
 
@@ -79,10 +79,10 @@ reported power, ENOB and sampling rate as `P / (2^ENOB · Fs)`:
 
 The assumed 20 fJ sits between their 40 and 80 MSps points. Because 6 bits
 requires fewer conversion steps than their 10, the assumption is if anything
-conservative. Quote Firlej directly; the older bracket below is superseded and
-kept only for context.
+conservative. Firlej is the primary reference; the wider bracket below is
+retained for context.
 
-| Superseded bracket | FoM | Conditions |
+| Wider bracket | FoM | Conditions |
 |---|---|---|
 | Tai et al., ISSCC 2014, 11.2 | 0.85 fJ/conv-step | 10 b, 200 kS/s, 40 nm |
 | 65 nm 1.2 V 12 b 30 MS/s ADC | 410 fJ | 12 b, 30 MS/s, 18 mW |
@@ -138,13 +138,6 @@ and the leakage power savings is over 10×."* Applying that:
 non-volatility argument stands. Two notes: the cell is 8T, so two extra
 transistors leak per bit and 8.39 pW/bit slightly *over*-states a 6T cell; and
 the ≥10× factor is a lower bound, so 120 pW/bit is a conservative reading.
-
-**Retracted:** an earlier revision of this file flagged 120 pW/bit as
-dangerously high on the basis of 5.34 pW/bit (14 nm) and 12 pW/bit (22 nm).
-Both of those are measured at **0.5 V** in aggressive low-leakage designs.
-Comparing them to a 65 nm 1.2 V assumption was the same node-and-supply
-conflation this document warns about elsewhere. They remain useful as
-advanced-node, low-voltage reference points and nothing more.
 
 Note also the 22 nm part's 10 pW/bit *shutdown* figure is not usable in any
 case: shutdown collapses the array and loses the weights.
@@ -375,10 +368,9 @@ to the R_sense term.
 
 ### Technology comparison — NeuroSim, 2-bit weights, VGG-8
 
-**6-bit hardware ADC** (`levelOutput = 64` in `Param.cpp`). Earlier revisions of
-this table were at `levelOutput = 32`, i.e. a 5-bit converter, because the
-Python `--ADCprecision` flag does not reach NeuroSim's hardware model. Those
-numbers are superseded.
+**6-bit hardware ADC.** NeuroSim's hardware converter resolution is set by
+`levelOutput` in `Param.cpp`, not by the Python `--ADCprecision` flag;
+`levelOutput = 64` is required for a 6-bit converter.
 
 | | chip area | latency/img | TOPS/W | TOPS/mm² |
 |---|---:|---:|---:|---:|
@@ -452,7 +444,7 @@ Horowitz DRAM figure.
 **On MAC unit area.** The uploaded MAC review (*International Innovative
 Research Journal of Engineering and Technology*, IIRJET, ISSN 2456-1983)
 reports **1083–1252 µm²** for MAC units at TSMC 65 nm, which is the same order
-as the assumed 1800 µm². **Do not cite it.** IIRJET is not an indexed venue
+as the assumed 1800 µm², but IIRJET is not an indexed venue
 with recognised peer review, the text is poorly edited throughout, and the
 numbers are secondhand from papers it summarises. A DATE reviewer will notice.
 

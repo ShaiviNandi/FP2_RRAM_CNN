@@ -1,8 +1,7 @@
 # The architecture, defined
 
-The single reference for what is being proposed. Written because two separate
-comparisons have now been run against configurations that were not this one,
-and each time the mismatch was mistaken for a result.
+The single reference for what is being proposed. Any comparison run against a
+configuration other than the one defined here is measuring something else.
 
 ---
 

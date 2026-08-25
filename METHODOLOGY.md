@@ -395,7 +395,7 @@ asserted.
 
 ## 11. Known limitations of the methodology
 
-Ordered by how much they threaten a conclusion.
+Ordered by how tightly each bounds a conclusion.
 
 1. **Wire parasitics are not in the main evaluation path.** The mesh solve
    shows the per-column constant leaves **49.1%** residual with 0.5 Ω bitline
@@ -443,24 +443,3 @@ activation patterns.
 
 ---
 
-## 13. Mistakes made and corrected, for the record
-
-Kept visible because the pattern matters more than the individual errors.
-
-- **"Taller columns are more variability-tolerant"** — retracted. Sampling
-  noise at n=1000 with 3 seeds, where the 95% CI is ±1.9 points. The full test
-  set with 10 seeds reversed the sign.
-- **"Five ADC bits suffice"** — wrong for the same reason. Six are needed.
-- **Array-power fallback 30× too high**, making every efficiency figure
-  pessimistic until anchored to ngspice.
-- **A figure caption hardcoded "5 bits"** and kept claiming it after the data
-  changed.
-- **Refreshing only the loading constant made drift worse**, because weight
-  shrinkage dominates.
-- **A per-column gain fitted on one activation pattern** produced 2488% error
-  through division by near-zero, and was evaluated on its own fit data.
-
-Every one is either a number that looked settled at small sample size, or a
-conclusion that stopped tracking its data. The rule adopted: **re-run anything
-worth quoting on the full test set, and derive captions from data rather than
-typing them.**

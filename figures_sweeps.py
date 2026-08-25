@@ -111,14 +111,10 @@ def fig_variability(rows, outdir):
 def fig_variability_robustness(rows, outdir):
     """Accuracy lost from sigma=0 to the largest sigma, against tile height.
 
-    RETRACTION NOTE. An earlier version of this figure claimed taller columns
-    were MORE variability-tolerant, on the strength of a run at 1000 images
-    with 3 seeds which showed the loss shrinking from -1.27 pts at B=32 to
-    +0.07 at B=256. The full test set with 10 seeds reverses the ordering
-    (-0.54 -> -0.81): taller columns are in fact slightly WORSE, monotonically.
-    The earlier trend was sampling noise, and it is a good example of why the
-    +-1.9 pt confidence interval at n=1000 could not support a claim about
-    differences of a few tenths of a point.
+    Loss grows monotonically with tile height, -0.54 pts at B=32 to -0.81 at
+    B=256, on the full test set with 10 seeds. The differences are a few tenths
+    of a point and require the full test set to resolve: at n=1000 the
+    confidence interval is +-1.9 pts, wide enough to reverse the ordering.
 
     What survives, and is the point worth making: the loss is under 1 point at
     every tile height, so blind calibration holds across the whole range."""

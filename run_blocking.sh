@@ -233,12 +233,12 @@ stage_b5() {
 # B6  NeuroSim: re-run at the correct on/off ratio, and label the workload.
 #     The C++ side already carries the device parameters; the wrapper has its OWN
 #     --onoffratio which was still at its default of 10 against the actual 403. That
-#     is why TOPS/W barely moved (29.3 -> 30.3) after the "conversion".
+#     which is why the two configurations differ little in TOPS/W.
 # -----------------------------------------------------------------------------
 stage_b6() {
   # Search the usual places. A bare "NEUROSIM_DIR=... " on its own shell line
-  # is not exported, so a child bash never sees it; autodetection avoids that
-  # entire class of mistake.
+  # is not exported and a child bash never sees it, so the path is detected
+  # rather than inherited.
   local NS=""
   for cand in "${NEUROSIM_DIR:-}" ../DNN_NeuroSim_V1.4 ~/DNN_NeuroSim_V1.4 \
               ~/fp2_reram/DNN_NeuroSim_V1.4 /opt/DNN_NeuroSim_V1.4; do

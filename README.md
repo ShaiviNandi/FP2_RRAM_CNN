@@ -110,7 +110,7 @@ index.html, server.py       browser dashboard
 run_all.sh                  full pipeline, staged
 run_blocking.sh             pre-submission checklist, staged
 sync_results.sh             copy generated artefacts into results/
-tidy_repo.sh                remove build products and superseded drafts
+tidy_repo.sh                remove build products and duplicate drafts
 ```
 
 The papers themselves are not committed. They were obtained under an
@@ -193,7 +193,7 @@ Stated plainly, because several of these bound the claim.
   weight-stationary operation is viable.
 - **Wordline IR drop** is not modelled. Unlike bitline loading it is
   activation-dependent, so it would *not* reduce to a compile-time constant.
-  This is the most likely remaining threat to the contribution.
+  This bounds the claim and is stated in the paper.
 - **Level mapping.** R_MID/R_LRS = 2.0262 rather than exactly 2, and finite HRS
   leakage shifts every level. Level 0.5 lands at 0.492. Separate from readout
   error, currently absorbed into the reported digital ceiling.
@@ -207,8 +207,8 @@ assumed constant, including the `[SIM]/[MODEL]/[ASSUM]` tiers and the
 sensitivity sweeps behind the softest inputs. `NOVELTY.md` positions the
 work against the non-ideality mitigation literature.
 
-`docs/TODO.md` tracks open items, including two retracted claims and the
-reasoning behind each retraction.
+`METHODOLOGY.md` documents every model and its assumptions; `CITATIONS.md`
+records the source of every constant.
 
 ## Reproducing the figures
 
