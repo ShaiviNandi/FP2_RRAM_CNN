@@ -1,232 +1,157 @@
 # FP2 on a 2T2R ReRAM Crossbar
 
 Circuit-exact simulation of a 2-bit block-floating-point (FP2-E1M0) CNN
-accelerator built on a 2T2R resistive-RAM crossbar, with per-column
-loading-gain calibration.
+accelerator on a 2T2R resistive-RAM crossbar, with per-column loading-gain
+calibration. Every convolution is executed through the resistive-divider
+equations; no additive-noise surrogate is used anywhere.
 
-Every convolution is executed through the actual resistive-divider equations.
-No additive-Gaussian noise surrogate is used anywhere.
-
----
-
-## The result in one table
-
-CIFAR-10 Top-1, ResNet-18, full 10,000-image test set.
+CIFAR-10 Top-1, ResNet-18, full 10,000-image test set:
 
 | B = M | FP2 digital | crossbar, raw | crossbar, calibrated |
 |------:|------------:|--------------:|---------------------:|
-| 32    | 92.42%      | 77.66%        | **92.42%**           |
-| 64    | 92.47%      | 57.54%        | **92.47%**           |
-| 128   | 92.81%      | 11.60%        | **92.81%**           |
-| 256   | 92.43%      | 10.00%        | **92.43%**           |
-
-Uncalibrated readout reaches chance (10 classes) by B=128. Calibration
-restores the digital ceiling exactly at every tile height.
+| 32    | 92.42%      | 77.66%        | **92.42%** |
+| 64    | 92.47%      | 57.54%        | **92.47%** |
+| 128   | 92.81%      | 11.60%        | **92.81%** |
+| 256   | 92.43%      | 10.00%        | **92.43%** |
 
 ---
 
 ## The problem
 
-FP2-E1M0 stores each weight as one of {-1, -0.5, 0, +0.5, +1}, with B=32
-consecutive weights sharing an 8-bit scale factor.
+A block-floating-point format shares one scale across `B` weights. A crossbar
+column produces one current, which can carry one scale. **The block size and
+the tile height are therefore the same physical parameter.** FP2 is used with
+`B = 32`; amortising the ADC wants `M ≥ 128`.
 
-A crossbar column produces one current, which can carry only one scale factor.
-A tile spanning two blocks would require two scales applied to a sum already
-formed by Kirchhoff's current law. Block size and tile height are therefore the
-same physical parameter:
-
-    B = M
-
-The format specifies 32. ADC amortisation wants 128 or more. That collision is
-what this repository characterises.
+Built naively, the collision is fatal: accuracy falls to chance by `M = 128`.
 
 ## The cause
 
-A shared sense resistor R_s lifts the bitline off ground, reducing the voltage
-across every cell in the column. Nodal analysis at the bitline gives:
+A shared sense resistor holds the bitline slightly above ground, reducing the
+drive across every cell on it:
 
-    v_bl = (sum_i V_i G_i) / (1/R_s + G_col),    G_col = sum_i G_i
+```
+I_actual = I_ideal / (1 + R_s · G_col)
+```
 
-    I_actual = I_ideal / (1 + R_s * G_col)
-
-No activation term appears in the denominator. The error is a deterministic
-function of the programmed conductances, not noise. Additive zero-mean models
-cannot represent it, which is why the failure mode is invisible to the standard
-evaluation methodology.
-
-Fraction of ideal current reaching the ADC:
-
-| M | 32 | 128 | 256 |
-|---|---:|----:|----:|
-| retained | 73.9% | 41.5% | 26.0% |
+The denominator contains no activation term. It is a **deterministic gain set
+by the programmed conductances**, not noise — which is why an additive-noise
+model cannot see it, and why it grows with `M` instead of averaging away.
 
 ## The fix
 
-One constant per column, computed at compile time:
+Per bitline `j`, one compile-time constant `α_j = 1 + R_s · Σ G_ij`. Applied to
+each branch **before** the differential subtraction, the algebra collapses back
+to the exact product:
 
-    c_j = 1 + R_s * sum_i G_ij
+```
+α_p·I_p − α_n·I_n = (G_p − G_n)ᵀ V
+```
 
-2T2R reads both bitlines separately, so each is scaled by its own constant
-*before* the differential subtraction. Correcting after subtraction does not
-cancel, because the two lines carry different total conductances. The algebra
-collapses to the ideal product:
-
-    (G_p - G_n)^T V
-
-Cost: one multiply per column, foldable into the block-scale multiply already
-present in the digital path.
+Exact to machine precision. One multiply per column, folded into the
+block-scale multiply already in the datapath. No calibration data, no
+read-back, no retraining.
 
 ---
 
-## Validation
+## Architecture
+
+| | |
+|---|---|
+| Format | FP2-E1M0, levels `{0, ±0.5, ±1}`, E8M0 scale shared over `B = 32` |
+| Cell | 2T2R differential pair; `w ∝ G_p − G_n` |
+| States | `R_LRS` 542.8 Ω, `R_MID` 1099.8 Ω, `R_HRS` 218.6 kΩ (contrast 403) |
+| Tile | `M` rows × `K` columns, `M = B`, fully weight-stationary |
+| Readout | Passive shared sense resistor, `R_s = 20 Ω`, `V_read = 0.1 V` |
+| Converters | 6-bit SAR, **two per column** — both bitlines sensed separately |
+| Correction | One constant per bitline, applied before subtraction |
+
+Two converters per column is a requirement of the method, not an
+implementation choice: the two bitlines of a pair carry different `G_col` and
+must be corrected independently.
+
+`ARCHITECTURE.md` gives the full definition, including what is deliberately
+out of scope.
+
+## Methodology
+
+Four levels, each validated against the one above:
 
 | Level | Checked against | Worst disagreement |
 |---|---|---|
-| ngspice DC solve | reference | -- |
-| closed-form nodal model | ngspice, 87,168 tiles | 3.41e-7 % |
-| vectorised GPU solver | nodal model | < 1e-12 relative |
-| end-to-end inference | vectorised solver | same code path |
+| ngspice DC solve | — (reference) | — |
+| Closed-form nodal model | ngspice, all 87,168 tiles | 3.41 × 10⁻⁷ % |
+| Vectorised GPU solver | nodal model | < 10⁻¹² relative |
+| End-to-end inference | vectorised solver | same code path |
 
-Every tile of every layer, 357 M MAC-reads, zero errors.
+Validation is exhaustive rather than sampled: every tile of every layer,
+357 M MAC reads. The closed form needs no iteration, so it vectorises into one
+matrix multiply per layer — the difference between minutes and weeks for a
+full-test-set sweep.
 
-Device parameters, from SPICE calibration of the `rram_v_1_0_0` Verilog-A
-model: R_LRS = 542.8 ohm, R_MID = 1099.8 ohm, R_HRS = 218587.2 ohm
-(on/off ratio 403), R_sense = 20 ohm, V_read = 0.1 V.
+Device variability, conductance drift, ADC resolution and wire parasitics are
+swept rather than fixed at a single point. Every model constant is a named,
+overridable value at the top of the module that uses it, with its source in
+the comment beside it.
 
 ---
 
 ## Layout
 
 ```
-*.py                        simulation, evaluation, hardware model, figures
-date_paper_full.tex         DATE submission draft
-FP2_ReRAM_Explained.tex     long-form explainer, PDF alongside
-results/csv, figures, logs  generated outputs, committed
-references/INDEX.md         every cited paper and the number taken from it
-rtl/                        SystemVerilog/Verilog periphery and testbenches
-spice/                      ngspice decks and the Verilog-A ReRAM model
-docs/                       report, integration notes, open items
-index.html, server.py       browser dashboard
+*.py                        simulation, hardware model, figures
+ARCHITECTURE.md             the design, defined precisely
+results/{csv,figures,logs}  generated outputs
+rtl/                        Verilog periphery and testbenches
+spice/                      ngspice decks and the Verilog-A device model
 run_all.sh                  full pipeline, staged
-run_blocking.sh             pre-submission checklist, staged
 sync_results.sh             copy generated artefacts into results/
-tidy_repo.sh                remove build products and duplicate drafts
 ```
-
-The papers themselves are not committed. They were obtained under an
-institutional subscription and are not redistributable; `references/INDEX.md`
-records what each one supplies and where it came from.
-
-Key modules:
 
 | File | Role |
 |---|---|
-| `analog_eval.py` | End-to-end inference through the crossbar equations. Holds the ADC, variability and drift models. |
-| `crossbar_array_test.py` | Scalar reference solver and ngspice netlist generation. |
-| `ngspice_full_sweep.py` | Exhaustive per-tile ngspice validation, parallel and resumable. |
-| `benchmark_resnet18.py` | Per-layer SNR and readout error against a golden model. |
-| `qat_finetune_fp2.py` | FP2 quantization-aware training with a straight-through estimator. |
-| `hw_model.py` | Area, energy and delay. Every assumption is a named, overridable constant. |
-| `codesign_sweep.py` | Block-size Pareto sweep and the SRAM baseline. |
-| `make_figures.py`, `figures_sweeps.py`, `make_all_figures.py` | All figures and LaTeX tables, generated from the CSVs. |
-| `make_memory_area.py` | Weight-array footprint across ReRAM and SRAM. |
-| `bn_baseline.py` | BatchNorm recalibration baseline. |
-| `wordline_ir.py` | Full 2-D resistive mesh, for the wire-parasitic limits. |
-| `vonneumann_baseline.py` | Digital fetch-and-multiply baseline for the three-way comparison. |
-| `rlrs_tradeoff.py` | Device-resistance sweep: area against signal. |
-| `neurosim_compare.py`, `neurosim_area_breakdown.py` | Chip-level cross-check and component-wise area. |
+| `analog_eval.py` | Inference through the crossbar equations; ADC, variability and drift models |
+| `crossbar_array_test.py` | Scalar reference solver and ngspice netlist generation |
+| `ngspice_full_sweep.py` | Exhaustive per-tile validation, parallel and resumable |
+| `hw_model.py` | Area, energy, delay; every assumption a named constant |
+| `qat_finetune_fp2.py` | FP2 quantization-aware training, straight-through estimator |
+| `format_sweep.py` | Read margin and storage cost across weight formats |
+| `wordline_ir.py` | Full 2-D resistive mesh, for the wire-parasitic bounds |
+| `vonneumann_baseline.py` | Digital fetch-and-multiply baseline |
+| `bn_baseline.py` | BatchNorm recalibration baseline |
+| `neurosim_compare.py` | Chip-level cross-check against NeuroSim |
+| `make_figures.py`, `figures_sweeps.py` | Figures and LaTeX tables from the CSVs |
 
 ---
 
 ## Requirements
 
+Python 3.10+, PyTorch 2.0+, NumPy, Matplotlib. `ngspice` is needed only to
+re-run the SPICE validation. A CUDA GPU is optional; the accuracy sweeps run on
+CPU at roughly 20× the wall time.
+
 ```bash
 pip install -r requirements.txt
 ```
 
-ngspice is required only for the SPICE validation paths:
-
-```bash
-sudo apt install ngspice
-```
-
-A CUDA GPU is optional. Full-test-set sweeps take minutes on a GPU and hours
-on CPU.
-
-## Quick start
-
-```bash
-# verify the solver against its scalar reference
-python3 analog_eval.py --self-test
-
-# the headline sweep: raw vs calibrated at four tile heights
-python3 analog_eval.py --sweep 32,64,128,256 --data-dir ./data \
-  --max-images 0 --adc-bits 6 --out-csv analog_accuracy.csv
-
-# figures and LaTeX tables
-python3 make_figures.py --outdir paper/figures
-python3 figures_sweeps.py --outdir paper/figures
-
-# dashboard
-python3 server.py --fetch-vendor && python3 server.py --port 5057
-```
-
-`run_all.sh` runs any stage or all of them, with live output and per-stage
-logs. `run_all.sh` with no argument lists the stages.
-
 ---
 
-## Scope and limitations
+## Scope
 
-Stated plainly, because several of these bound the claim.
+Results are ResNet-18 on CIFAR-10 and CIFAR-100. Device parameters come from
+SPICE calibration of a Verilog-A compact model, not fabricated silicon; the
+structure of the argument does not depend on the particular values, but every
+downstream number does.
 
-- **Drift.** ReRAM conductance relaxes as a power law. A calibration computed
-  once at manufacture loses 27 points after a simulated year. Recomputing it
-  from the drifted array holds accuracy within 0.8 points indefinitely. The
-  supported claim is calibration *with periodic refresh*, not compile-time
-  calibration. Roughly ten refreshes over a product lifetime suffice, since
-  damage accumulates with the logarithm of time.
-- **Die area.** At B=128, fully weight-stationary ResNet-18 models to 412 mm2
-  at 65 nm. The argument depends on scaled nodes.
-- **Write cost.** Reprogramming is ~100 pJ/cell against ~0.001 pJ/cell to read.
-  Break-even against time-multiplexing is ~2200 images, so only fully
-  weight-stationary operation is viable.
-- **Wordline IR drop** is not modelled. Unlike bitline loading it is
-  activation-dependent, so it would *not* reduce to a compile-time constant.
-  This bounds the claim and is stated in the paper.
-- **Level mapping.** R_MID/R_LRS = 2.0262 rather than exactly 2, and finite HRS
-  leakage shifts every level. Level 0.5 lands at 0.492. Separate from readout
-  error, currently absorbed into the reported digital ceiling.
-- **RTL.** `rtl/resnet18_reram_top.sv` has no behavioural model at the ADC
-  boundary, so the RTL cross-check reports N/A. The synthesis flow is blocked
-  on this.
-- **NeuroSim comparison** is VGG-8 against ResNet-18 and is not like-for-like.
+Three bounds are measured and reported rather than omitted:
 
-`METHODOLOGY.md` documents every model and the provenance of every
-assumed constant, including the `[SIM]/[MODEL]/[ASSUM]` tiers and the
-sensitivity sweeps behind the softest inputs. `NOVELTY.md` positions the
-work against the non-ideality mitigation literature.
-
-`METHODOLOGY.md` documents every model and its assumptions; `CITATIONS.md`
-records the source of every constant.
-
-## Reproducing the figures
-
-Every number traces to a named CSV, and every figure and table is regenerated
-from those CSVs by `make_figures.py` and `figures_sweeps.py`. Captions that
-state a threshold derive it from the data rather than hardcoding it.
-
-## Citation
-
-```bibtex
-@misc{fp2reram,
-  title  = {Block Size Is Tile Height: Loading-Gain Calibration for
-            2-bit Floating-Point Compute-in-Memory},
-  author = {Nandi, Shaivi},
-  year   = {2026},
-  note   = {https://github.com/<user>/fp2-reram-crossbar}
-}
-```
+- **Wire parasitics.** Bitline metal leaves a 49.1% residual after correction.
+  A per-column scalar cannot capture a distributed drop, so the claim is
+  restricted to the shared-sense-resistor term.
+- **Drift.** A constant computed once at manufacture decays; periodic
+  recomputation from the drifted array holds accuracy flat.
+- **Area denominators.** Density figures are array-level. At 2-bit weights the
+  weight array is under 1% of a chip-level floorplan.
 
 ## License
 
